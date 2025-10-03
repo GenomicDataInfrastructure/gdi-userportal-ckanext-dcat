@@ -17,4 +17,3 @@ tmp/*
 package/DEBIAN/control
 *.swp
 .idea
-
