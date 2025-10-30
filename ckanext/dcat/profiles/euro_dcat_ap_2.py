@@ -1,6 +1,5 @@
 import json
 from decimal import Decimal, DecimalException
-
 from rdflib import URIRef, BNode, Literal, Namespace, FOAF, PROV, RDF, RDFS
 from ckanext.dcat.utils import resource_uri
 
@@ -19,7 +18,6 @@ from .base import (
 from .euro_dcat_ap_base import BaseEuropeanDCATAPProfile
 
 ELI = Namespace("http://data.europa.eu/eli/ontology#")
-
 
 class EuropeanDCATAP2Profile(BaseEuropeanDCATAPProfile):
     """
@@ -581,23 +579,27 @@ class EuropeanDCATAP2Profile(BaseEuropeanDCATAPProfile):
             _type=URIRefOrLiteral,
             _class=ADMS.Identifier,
         )
-        
+
     def _parse_qualified_attributions(self, dataset_ref):
+
         attributions = []
         for qual_attr_ref in self.g.objects(dataset_ref, PROV.qualifiedAttribution):
             attr = {}
 
-            # Get role
+            role_str = ""
             for role_ref in self.g.objects(qual_attr_ref, DCAT.hadRole):
-                attr["role"] = str(role_ref)
+                role_str = (str(role_ref) if role_ref is not None else "").strip()
                 break
 
-            # Get agent (using shared logic)
             agent_details = self._agents_details(qual_attr_ref, PROV.agent)
-            if agent_details:
-                attr["agent"] = agent_details
 
-            if attr:
-                attributions.append(attr)
+            if not role_str and not agent_details:
+                continue
+
+            attr["role"] = role_str
+
+            attr["agent"] = agent_details if agent_details else []
+
+            attributions.append(attr)
 
         return attributions
