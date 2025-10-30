@@ -598,7 +598,7 @@ class EuropeanDCATAP2Profile(BaseEuropeanDCATAPProfile):
 
             attr["role"] = role_str
 
-            attr["agent"] = agent_details if agent_details else []
+            attr["agent"] = agent_details
 
             attributions.append(attr)
 
