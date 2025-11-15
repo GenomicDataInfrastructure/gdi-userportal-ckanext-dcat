@@ -177,11 +177,16 @@ class TestSchemingFluentSerializeSupport(BaseSerializeTest):
         assert self._triple(g, dataset_ref, OWL.versionInfo, dataset["version"])
 
         contact_details = [t for t in g.triples((dataset_ref, DCAT.contactPoint, None))]
+        contact_nodes = [t[2] for t in contact_details]
 
         assert len(contact_details) == len(dataset["contact"])
-        assert self._triple(
-            g, contact_details[0][2], VCARD.fn, dataset_dict["contact"][0]["name"]
-        )
+        for idx, contact in enumerate(dataset_dict["contact"]):
+            translations = contact.get("name_translated") or {}
+            if not translations:
+                continue
+            contact_node = contact_nodes[idx]
+            for lang, value in translations.items():
+                assert self._triple(g, contact_node, VCARD.fn, value, lang=lang)
 
 
 @pytest.mark.usefixtures("with_plugins", "clean_db")
@@ -241,6 +246,18 @@ class TestSchemingFluentParseSupport(BaseParseTest):
         assert dataset["version_notes"]["en"] == "Some version notes"
         assert dataset["version_notes"]["ca"] == "Notes sobre la versió"
         assert dataset["version_notes"]["es"] == "Notas sobre la versión"
+
+        contacts = dataset["contact"]
+        assert len(contacts) == 2
+        contacts_by_id = {item["identifier"]: item for item in contacts}
+        contact_1 = contacts_by_id["123"]
+        contact_2 = contacts_by_id["456"]
+        assert contact_1["name_translated"]["en"] == "Contact 1"
+        assert contact_1["name_translated"]["ca"] == "Contacte 1"
+        assert contact_1["name_translated"]["es"] == "Contacto 1"
+        assert contact_2["name_translated"]["en"] == "Contact 2"
+        assert contact_2["name_translated"]["ca"] == "Contacte 2"
+        assert contact_2["name_translated"]["es"] == "Contacto 2"
 
         resource = dataset["resources"][0]
 
