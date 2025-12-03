@@ -210,6 +210,7 @@ class EuropeanDCATAP2Profile(BaseEuropeanDCATAPProfile):
                             ("keyword", DCAT.keyword),
                             ("applicable_legislation", DCATAP.applicableLegislation),
                             ("theme", DCAT.theme),
+                            ("hvd_category", DCATAP.hvdCategory),
                         ):
                             values = self._object_value_list(access_service, predicate)
                             if values:
