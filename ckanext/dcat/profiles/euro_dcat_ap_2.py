@@ -210,6 +210,7 @@ class EuropeanDCATAP2Profile(BaseEuropeanDCATAPProfile):
                             ("keyword", DCAT.keyword),
                             ("applicable_legislation", DCATAP.applicableLegislation),
                             ("theme", DCAT.theme),
+                            ("hvd_category", DCATAP.hvdCategory),
                         ):
                             values = self._object_value_list(access_service, predicate)
                             if values:
@@ -523,6 +524,7 @@ class EuropeanDCATAP2Profile(BaseEuropeanDCATAPProfile):
                     ("landing_page", DCAT.landingPage, None, URIRefOrLiteral),
                     ("applicable_legislation", DCATAP.applicableLegislation, None, URIRefOrLiteral, ELI.LegalResource),
                     ("theme", DCAT.theme, None, URIRefOrLiteral),
+                    ("hvd_category", DCATAP.hvdCategory, None, URIRefOrLiteral),
                 ]
                 self._add_list_triples_from_dict(access_service_dict, access_service_node, extra_items)
 
