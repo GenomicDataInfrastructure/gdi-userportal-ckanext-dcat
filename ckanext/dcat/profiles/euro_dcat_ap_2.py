@@ -524,6 +524,7 @@ class EuropeanDCATAP2Profile(BaseEuropeanDCATAPProfile):
                     ("landing_page", DCAT.landingPage, None, URIRefOrLiteral),
                     ("applicable_legislation", DCATAP.applicableLegislation, None, URIRefOrLiteral, ELI.LegalResource),
                     ("theme", DCAT.theme, None, URIRefOrLiteral),
+                    ("hvd_category", DCATAP.hvdCategory, None, URIRefOrLiteral),
                 ]
                 self._add_list_triples_from_dict(access_service_dict, access_service_node, extra_items)
 
