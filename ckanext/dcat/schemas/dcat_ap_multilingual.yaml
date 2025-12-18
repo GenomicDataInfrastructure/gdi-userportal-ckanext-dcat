@@ -97,6 +97,11 @@ dataset_fields:
     - field_name: name
       label: Name
 
+    - field_name: name_translated
+      label: Name (translations)
+      preset: fluent_core_translated
+      help_text: Name of the contact point in each language.
+
     - field_name: email
       label: Email
       display_snippet: email.html

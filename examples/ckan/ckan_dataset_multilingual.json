@@ -50,11 +50,21 @@
     "contact": [
         {
             "name": "Contact 1",
+            "name_translated": {
+                "en": "Contact 1",
+                "ca": "Contacte 1",
+                "es": "Contacto 1"
+            },
             "email": "contact1@example.org",
             "identifier": "123"
         },
         {
             "name": "Contact 2",
+            "name_translated": {
+                "en": "Contact 2",
+                "ca": "Contacte 2",
+                "es": "Contacto 2"
+            },
             "email": "contact2@example.org",
             "identifier": "456"
         }

@@ -29,11 +29,15 @@
         "Some version notes"@en,
         "Notas sobre la versión"@es ;
     dcat:contactPoint [ a vcard:Kind ;
-            vcard:fn "Contact 2" ;
+            vcard:fn "Contact 2"@en,
+                "Contacte 2"@ca,
+                "Contacto 2"@es ;
             vcard:hasEmail <mailto:contact2@example.org> ;
             vcard:hasUID "456" ],
         [ a vcard:Kind ;
-            vcard:fn "Contact 1" ;
+            vcard:fn "Contact 1"@en,
+                "Contacte 1"@ca,
+                "Contacto 1"@es ;
             vcard:hasEmail <mailto:contact1@example.org> ;
             vcard:hasUID "123" ] ;
     dcat:distribution <https://example.org/dataset/0112cf32-bce0-4071-9504-923375f9f2ad/resource/db416e08-1efd-46ae-8ca6-7bc6aaba9e10> ;
@@ -71,4 +75,3 @@
 <https://example.org/some-doc.html> a foaf:Document .
 
 <https://example.com/data.csv> a rdfs:Resource .
-

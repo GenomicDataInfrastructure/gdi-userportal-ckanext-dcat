@@ -154,6 +154,7 @@ class RDFProfile(object):
         self.compatibility_mode = compatibility_mode
 
         self._default_lang = config.get("ckan.locale_default", "en")
+        self._default_locale_lang = None
 
 
         try:
@@ -190,6 +191,18 @@ class RDFProfile(object):
         """
         for distribution in self.g.objects(dataset, DCAT.distribution):
             yield distribution
+
+    def _get_default_locale_lang(self):
+        """
+        Returns the configured default locale without the region (eg `en` for `en_GB`).
+        Value is cached per instance as it is used in multiple places (publisher/contact parsing).
+        """
+        if self._default_locale_lang is None:
+            default_locale = config.get("ckan.locale_default", "") or ""
+            self._default_locale_lang = (
+                default_locale.split("_")[0] if default_locale else None
+            )
+        return self._default_locale_lang
 
     def _keywords(self, dataset_ref):
         """
@@ -533,8 +546,7 @@ class RDFProfile(object):
         """
 
         agents = []
-        default_locale = config.get("ckan.locale_default", "") or ""
-        default_lang = default_locale.split("_")[0] if default_locale else None
+        default_lang = self._get_default_locale_lang()
 
         for agent in self.g.objects(subject, predicate):
             agent_details = {}
@@ -592,6 +604,8 @@ class RDFProfile(object):
         """
 
         contacts = []
+        default_lang = self._get_default_locale_lang()
+
         for agent in self.g.objects(subject, predicate):
 
             contact = {}
@@ -600,6 +614,43 @@ class RDFProfile(object):
             contact["name"] = self._get_vcard_property_value(
                 agent, VCARD.hasFN, VCARD.fn
             )
+
+            name_literals = []
+            for literal in self.g.objects(agent, VCARD.fn):
+                name_literals.append(literal)
+            for value in self.g.objects(agent, VCARD.hasFN):
+                if isinstance(value, Literal):
+                    name_literals.append(value)
+                elif isinstance(value, BNode):
+                    name_literals.extend(self.g.objects(value, VCARD.hasValue))
+                else:
+                    name_literals.append(value)
+
+            translations = {}
+            fallback_name = contact.get("name", "")
+            for literal in name_literals:
+                if isinstance(literal, Literal):
+                    value = str(literal)
+                    lang = literal.language
+                    if lang:
+                        translations[lang] = value
+                    elif not fallback_name:
+                        fallback_name = value
+                elif not fallback_name:
+                    fallback_name = str(literal)
+
+            if translations:
+                contact["name_translated"] = translations
+                if default_lang and translations.get(default_lang):
+                    contact["name"] = translations[default_lang]
+                elif fallback_name:
+                    contact["name"] = fallback_name
+                else:
+                    contact["name"] = next(
+                        (value for value in translations.values() if value), ""
+                    )
+            elif fallback_name and not contact.get("name"):
+                contact["name"] = fallback_name
 
             contact["email"] = self._without_mailto(
                 self._get_vcard_property_value(agent, VCARD.hasEmail)
@@ -932,7 +983,9 @@ class RDFProfile(object):
         self.g.add((contact_details, RDF.type, VCARD.Kind))
         self.g.add((subject, predicate, contact_details))
 
-        self._add_triple_from_dict(contact, contact_details, VCARD.fn, "name")
+        self._add_triple_from_dict(
+            contact, contact_details, VCARD.fn, "name_translated", ["name"]
+        )
         self._add_triple_from_dict(
             contact,
             contact_details,
