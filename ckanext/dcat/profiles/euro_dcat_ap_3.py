@@ -30,6 +30,16 @@ class EuropeanDCATAP3Profile(EuropeanDCATAP2Profile, EuropeanDCATAPSchemingProfi
         # DCAT AP v2 scheming fields
         dataset_dict = self._parse_dataset_v2_scheming(dataset_dict, dataset_ref)
 
+        sample_uris = []
+        for sample in self.g.objects(dataset_ref, ADMS.sample):
+            if (sample, RDF.type, DCAT.Distribution) in self.g:
+                resource_dict = self._parse_distribution(sample)
+                dataset_dict["resources"].append(resource_dict)
+            sample_uris.append(str(sample))
+        
+        if sample_uris:
+            dataset_dict["sample"] = sample_uris
+
         # DCAT AP v3: hasVersion
         values = self._object_value_list(dataset_ref, DCAT.hasVersion)
         if values:
@@ -71,6 +81,10 @@ class EuropeanDCATAP3Profile(EuropeanDCATAP2Profile, EuropeanDCATAPSchemingProfi
         self._graph_from_catalog_base(catalog_dict, catalog_ref)
 
     def _graph_from_dataset_v3(self, dataset_dict, dataset_ref):
+
+        for sample_uri in dataset_dict.get("sample", []):
+            if sample_uri:
+                self.g.add((dataset_ref, ADMS.sample, URIRef(sample_uri)))
 
         dataset_series = False
 
