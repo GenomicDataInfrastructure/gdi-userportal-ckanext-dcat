@@ -73,9 +73,10 @@ class EuropeanDCATAP3Profile(EuropeanDCATAP2Profile, EuropeanDCATAPSchemingProfi
 
     def _graph_from_dataset_v3(self, dataset_dict, dataset_ref):
 
-        for sample_uri in dataset_dict.get("sample", []):
-            if sample_uri:
-                self.g.add((dataset_ref, ADMS.sample, URIRef(sample_uri)))
+        items = [
+            ("sample", ADMS.sample, None, URIRefOrLiteral),
+        ]
+        self._add_list_triples_from_dict(dataset_dict, dataset_ref, items)
 
         dataset_series = False
 
