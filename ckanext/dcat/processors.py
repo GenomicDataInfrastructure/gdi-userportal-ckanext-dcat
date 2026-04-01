@@ -201,14 +201,18 @@ class RDFParser(RDFProcessor):
                     dataset_type=self.dataset_type,
                     compatibility_mode=self.compatibility_mode
                 )
-                profile.parse_dataset(dataset_dict, dataset_ref)
+                dataset_dict = profile.parse_dataset(dataset_dict, dataset_ref)
 
             # Add in_series if present in RDF and mapped
             in_series = []
             for series_ref in self.g.objects(dataset_ref, DCAT.inSeries):
                 key = str(series_ref)
-                if series_mapping and key in series_mapping:
-                    in_series.append(series_mapping[key]["id"])
+                if not series_mapping or key not in series_mapping:
+                    continue
+
+                series_id = series_mapping[key].get("id")
+                if series_id:
+                    in_series.append(series_id)
 
             if in_series:
                 dataset_dict["in_series"] = in_series
@@ -233,7 +237,7 @@ class RDFParser(RDFProcessor):
                     dataset_type=self.dataset_type,
                     compatibility_mode=self.compatibility_mode
                 )
-                profile.parse_dataset(dataset_dict, dataset_ref)
+                dataset_dict = profile.parse_dataset(dataset_dict, dataset_ref)
 
             yield dataset_dict
 
