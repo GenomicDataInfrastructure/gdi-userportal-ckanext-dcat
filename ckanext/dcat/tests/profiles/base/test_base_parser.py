@@ -1,5 +1,6 @@
 
 import pytest
+import json
 
 from ckantoolkit import config
 
@@ -53,6 +54,16 @@ def _default_graph():
     return g
 
 
+def _dataset_series_graph():
+
+    g = Graph()
+
+    dataset_series = URIRef("http://example.org/series/1")
+    g.add((dataset_series, RDF.type, DCAT.DatasetSeries))
+
+    return g
+
+
 class MockRDFProfile1(RDFProfile):
 
     def parse_dataset(self, dataset_dict, dataset_ref):
@@ -67,6 +78,25 @@ class MockRDFProfile2(RDFProfile):
     def parse_dataset(self, dataset_dict, dataset_ref):
 
         dataset_dict['profile_2'] = True
+
+        return dataset_dict
+
+
+class MockRDFProfileReplacingDict(RDFProfile):
+
+    def parse_dataset(self, dataset_dict, dataset_ref):
+
+        return {'replacement_profile': True}
+
+
+class MockDatasetSeriesTemporalProfile(RDFProfile):
+
+    def parse_dataset(self, dataset_dict, dataset_ref):
+
+        dataset_dict['temporal_coverage'] = [{
+            'start': '2020-01-01',
+            'end': '2020-12-31',
+        }]
 
         return dataset_dict
 
