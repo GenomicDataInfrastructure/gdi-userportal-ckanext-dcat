@@ -198,6 +198,40 @@ class TestEuroDCATAP2ProfileSerializeDataset(BaseSerializeTest):
         wkt_cent = wkt.dumps(json.loads(extras['spatial_centroid']), decimals=4)
         assert self._triple(g, spatial, DCAT.centroid, wkt_cent, GSP.wktLiteral)
 
+    def test_spatial_input_in_wkt(self):
+        dataset = {
+            'id': '4b6fe9ca-dc77-4cec-92a4-55c6624a5bd6',
+            'name': 'test-dataset',
+            'extras': [
+                {'key': 'spatial_uri', 'value': 'http://sws.geonames.org/6361390/'},
+                {'key': 'spatial_text', 'value': 'Tarragona'},
+                {'key': 'spatial', 'value': 'POLYGON ((1.1871 41.0786, 1.1871 41.1655, 1.3752 41.1655, 1.3752 41.0786, 1.1871 41.0786))'},
+                {'key': 'spatial_bbox', 'value': 'POLYGON ((1.1871 41.0786, 1.1871 41.1655, 1.3752 41.1655, 1.3752 41.0786, 1.1871 41.0786))'},
+                {'key': 'spatial_centroid', 'value': 'POINT (2.2811 42.122)'},
+
+            ]
+        }
+        extras = self._extras(dataset)
+
+        s = RDFSerializer(profiles=DCAT_AP_PROFILES)
+        g = s.g
+
+        dataset_ref = s.graph_from_dataset(dataset)
+
+        spatial = self._triple(g, dataset_ref, DCT.spatial, None)[2]
+        assert spatial
+        assert str(spatial) == extras['spatial_uri']
+        assert self._triple(g, spatial, RDF.type, DCT.Location)
+        assert self._triple(g, spatial, SKOS.prefLabel, extras['spatial_text'])
+
+        assert len([t for t in g.triples((spatial, LOCN.geometry, None))]) == 1
+        assert len([t for t in g.triples((spatial, DCAT.bbox, None))]) == 1
+        assert len([t for t in g.triples((spatial, DCAT.centroid, None))]) == 1
+
+        assert self._triple(g, spatial, LOCN.geometry, extras['spatial'], GSP.wktLiteral)
+        assert self._triple(g, spatial, DCAT.bbox, extras['spatial_bbox'], GSP.wktLiteral)
+        assert self._triple(g, spatial, DCAT.centroid, extras['spatial_centroid'], GSP.wktLiteral)
+
     @pytest.mark.ckan_config("ckanext.dcat.output_spatial_format", "geojson")
     def test_spatial_geojson(self):
         dataset = {
