@@ -67,7 +67,9 @@ class DCATHarvester(HarvesterBase):
             did_get = False
             r = session.head(url)
 
-            if r.status_code == 405 or r.status_code == 400:
+            # Some servers respond with 400 or 404 to HEAD requests, even if the resource exists. 
+            # In that case we want to try a GET request before giving up.
+            if not r.ok: 
                 r = session.get(url, stream=True)
                 did_get = True
             r.raise_for_status()
