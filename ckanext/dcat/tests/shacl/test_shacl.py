@@ -199,6 +199,9 @@ def test_validate_dcat_ap_3_graph():
     known_failures = [
         "Value does not have class skos:Concept",
         "Value does not have class dcat:Dataset",
+        # ckanext-dcat#381
+        "Value does not have class <http://www.w3.org/ns/locn#Geometry>",
+        "Value is not of Node Kind shacl:BlankNodeOrIRI"
     ]
 
     assert set(failures) - set(known_failures) == set(), results_text
