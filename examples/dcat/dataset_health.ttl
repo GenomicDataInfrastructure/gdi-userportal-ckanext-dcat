@@ -93,6 +93,7 @@
                                         ];
         adms:identifier                 <internalURI:admsIdentifier0>;
         adms:sample                     <http://example.com/sample>;
+        adms:status                     <http://publications.europa.eu/resource/authority/dataset-status/DEVELOP>;
         adms:versionNotes               "Dataset continuously updated";
         dcat:contactPoint               <internalURI:contactPoint0>;
         dcat:distribution <http://example.com/analytics> ;
