@@ -41,8 +41,8 @@
     healthdcatap:healthCategory <http://example.com/ontology/resource/authority/healthcategories/DIOH>,
         <http://example.com/ontology/resource/authority/healthcategories/EHRS>,
         <http://example.com/ontology/resource/authority/healthcategories/IDHP>,
-        <http://example.com/ontology/resource/authority/healthcategories/PHDR>,
-        <http://www.wikidata.org/entity/Q58624061>,
+        <http://example.com/ontology/resource/authority/healthcategories/PHDR> ;
+    healthdcatap:healthTheme <http://www.wikidata.org/entity/Q58624061>,
         <http://www.wikidata.org/entity/Q7907952> ;
     healthdcatap:maxTypicalAge "110"^^xsd:nonNegativeInteger ;
     healthdcatap:minTypicalAge "0"^^xsd:nonNegativeInteger ;

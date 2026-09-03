@@ -203,7 +203,7 @@ class EuropeanHealthDCATAPProfile(EuropeanDCATAP3Profile):
             ("code_values", HEALTHDCATAP.hasCodeValues, None, URIRefOrLiteral),
             ("coding_system", HEALTHDCATAP.hasCodingSystem, None, URIRefOrLiteral),
             ("health_category", HEALTHDCATAP.healthCategory, None, URIRefOrLiteral),
-            ("health_theme", HEALTHDCATAP.healthCategory, None, URIRefOrLiteral),
+            ("health_theme", HEALTHDCATAP.healthTheme, None, URIRefOrLiteral),
             ("legal_basis", DPV.hasLegalBasis, None, URIRefOrLiteral),
             ("personal_data", DPV.hasPersonalData, None, URIRef),
             ("publisher_type", HEALTHDCATAP.publisherType, None, URIRefOrLiteral),

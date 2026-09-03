@@ -315,19 +315,20 @@ class EuropeanDCATAP2Profile(BaseEuropeanDCATAPProfile):
             for agent_dict in activity.get("wasAssociatedWith", []):
                 self._add_agent_to_graph(activity_uri, PROV.wasAssociatedWith, agent_dict)
 
-        # Qualified Attribution
+        # Qualified Attribution (DCAT reuses PROV-O for this; it has no
+        # dcat:qualifiedAttribution/dcat:agent terms of its own)
         qualified_attributions = dataset_dict.get("qualified_attribution", [])
         for attr in qualified_attributions:
             attr_ref = BNode()
-            self.g.add((dataset_ref, DCAT.qualifiedAttribution, attr_ref))
-            self.g.add((attr_ref, RDF.type, DCAT.Attribution))
+            self.g.add((dataset_ref, PROV.qualifiedAttribution, attr_ref))
+            self.g.add((attr_ref, RDF.type, PROV.Attribution))
 
             agent_list = attr.get("agent", [])
             for agent_dict in agent_list:
                 if isinstance(agent_dict, dict):
-                    self._add_agent_to_graph(attr_ref, DCAT.agent, agent_dict)
+                    self._add_agent_to_graph(attr_ref, PROV.agent, agent_dict)
                 elif isinstance(agent_dict, str):
-                    self.g.add((attr_ref, DCAT.agent, URIRef(agent_dict)))
+                    self.g.add((attr_ref, PROV.agent, URIRef(agent_dict)))
             role = attr.get("role")
             if role:
                 self.g.add((attr_ref, DCAT.hadRole, URIRef(role)))

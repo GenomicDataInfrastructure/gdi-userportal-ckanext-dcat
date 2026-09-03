@@ -414,6 +414,34 @@ class TestSchemingSerializeSupport(BaseSerializeTest):
         statement = [s for s in g.objects(distribution_ref, DCT.rights)][0]
         assert self._triple(g, statement, RDFS.label, resource["rights"])
 
+    def test_publisher_first_only_on_serialize(self):
+        """
+        DCAT-AP restricts dct:publisher to 0..1: even if a dataset has
+        multiple publishers stored (e.g. from a non-compliant harvest
+        source), only the first should be serialized.
+        """
+        dataset_dict = {
+            "name": "test-dataset-multi-publisher",
+            "title": "Test DCAT dataset multi publisher",
+            "notes": "Lorem ipsum",
+            "publisher": [
+                {"name": "Publisher One", "email": "one@example.com"},
+                {"name": "Publisher Two", "email": "two@example.com"},
+            ],
+        }
+
+        dataset = call_action("package_create", **dataset_dict)
+        assert len(dataset["publisher"]) == 2
+
+        s = RDFSerializer()
+        g = s.g
+
+        dataset_ref = s.graph_from_dataset(dataset)
+
+        publishers = [t for t in g.triples((dataset_ref, DCT.publisher, None))]
+        assert len(publishers) == 1
+        assert self._triple(g, publishers[0][2], FOAF.name, "Publisher One")
+
     def test_publisher_fallback_org(self):
 
         org = factories.Organization(
