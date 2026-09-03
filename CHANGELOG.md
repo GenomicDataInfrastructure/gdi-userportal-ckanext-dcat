@@ -1,6 +1,13 @@
 # Changelog
 
-## [Unreleased](https://github.com/ckan/ckanext-dcat/compare/v2.4.3...HEAD)
+## [Unreleased](https://github.com/ckan/ckanext-dcat/compare/v2.4.4...HEAD)
+
+## [v2.4.4](https://github.com/ckan/ckanext-dcat/compare/v2.4.3...v2.4.4) - 2026-05-22
+
+* Support for CKAN 2.12 ([#379](https://github.com/ckan/ckanext-dcat/pull/379))
+* Fix bug in geometry serialization, locn:Geometry -> locn:geometry ([#381](https://github.com/ckan/ckanext-dcat/pull/381))
+* Fallback to GET request on harvesters when HEAD requests fails with more error codes ([#381](https://github.com/ckan/ckanext-dcat/pull/381))
+
 
 ## [v2.4.3](https://github.com/ckan/ckanext-dcat/compare/v2.4.2...v2.4.3) - 2026-05-22
 
