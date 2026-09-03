@@ -4,7 +4,7 @@ from rdflib.namespace import DCTERMS as DCT
 from .base import CleanedURIRef
 from ckanext.dcat.utils import resource_uri
 from ckanext.dcat.profiles.base import URIRefOrLiteral
-from ckanext.dcat.profiles.euro_dcat_ap_3 import EuropeanDCATAP3Profile
+from ckanext.dcat.profiles.euro_dcat_ap_nl import EuropeanDCATAPNLProfile
 
 # HealthDCAT-AP namespace. Note: not finalized yet
 HEALTHDCATAP = Namespace("http://healthdataportal.eu/ns/health#")
@@ -30,7 +30,7 @@ MULTILINGUAL_LITERAL_FIELDS = {
 }
 
 
-class EuropeanHealthDCATAPProfile(EuropeanDCATAP3Profile):
+class EuropeanHealthDCATAPProfile(EuropeanDCATAPNLProfile):
     """
     A profile implementing HealthDCAT-AP, a health-related extension of the DCAT
     application profile for sharing information about Catalogues containing Datasets
@@ -38,7 +38,7 @@ class EuropeanHealthDCATAPProfile(EuropeanDCATAP3Profile):
     """
 
     def parse_dataset(self, dataset_dict, dataset_ref):
-        # Call super method for DCAT-AP 3 properties
+        # Call super method for DCAT-AP 3 / DCAT-AP-NL properties
         dataset_dict = super(EuropeanHealthDCATAPProfile, self).parse_dataset(
             dataset_dict, dataset_ref
         )
@@ -74,7 +74,7 @@ class EuropeanHealthDCATAPProfile(EuropeanDCATAP3Profile):
         quality_annotations = self._parse_quality_annotation(dataset_ref)
         if quality_annotations:
             dataset_dict["quality_annotation"] = quality_annotations
-            
+
         # Dataset-level retention
         dataset_dict["retention_period"] = self._parse_retention_period(dataset_ref)
 

@@ -41,6 +41,10 @@ class TestSchemingParseSupport(BaseParseTest):
 
         dataset_dict = datasets[0]
 
+        assert dataset_dict["dataset_status"] == (
+            "http://publications.europa.eu/resource/authority/dataset-status/DEVELOP"
+        )
+
         dataset_dict["name"] = "test-dcat-1"
         dataset = call_action("package_create", **dataset_dict)
 
