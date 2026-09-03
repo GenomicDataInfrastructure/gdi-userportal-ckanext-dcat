@@ -236,7 +236,9 @@ class EuropeanDCATAPSchemingProfile(RDFProfile):
             for item in contact:
                 self._add_contact_to_graph(dataset_ref, DCAT.contactPoint, item)
 
-        self._add_agents(dataset_ref, dataset_dict, "publisher", DCT.publisher)
+        self._add_agents(
+            dataset_ref, dataset_dict, "publisher", DCT.publisher, first_only=True
+        )
         self._add_agents(dataset_ref, dataset_dict, "creator", DCT.creator)
 
         temporal = dataset_dict.get("temporal_coverage")

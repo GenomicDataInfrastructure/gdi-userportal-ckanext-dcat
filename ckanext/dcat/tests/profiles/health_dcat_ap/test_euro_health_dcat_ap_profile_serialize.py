@@ -135,14 +135,14 @@ class TestEuroDCATAP3ProfileSerializeDataset(BaseSerializeTest):
         org_node = acted_on[0]
         assert self._triple(g, org_node, FOAF.name, Literal(dataset_dict["provenance_activity"][0]["wasAssociatedWith"][0]["actedOnBehalfOf"][0]["name"]))
 
-        # Test qualified attribution
-        attributions = [t for t in g.triples((dataset_ref, DCAT.qualifiedAttribution, None))]
+        # Test qualified attribution (DCAT reuses PROV-O for this)
+        attributions = [t for t in g.triples((dataset_ref, PROV.qualifiedAttribution, None))]
         assert len(attributions) == 1
         attr_node = attributions[0][2]
-        assert self._triple(g, attr_node, RDF.type, DCAT.Attribution)
+        assert self._triple(g, attr_node, RDF.type, PROV.Attribution)
         assert self._triple(g, attr_node, DCAT.hadRole, URIRef(dataset_dict["qualified_attribution"][0]["role"]))
 
-        agent_node = list(g.objects(attr_node, DCAT.agent))[0]
+        agent_node = list(g.objects(attr_node, PROV.agent))[0]
         agent_details = dataset_dict["qualified_attribution"][0]["agent"][0]
         agent_items = [
             (RDF.type, FOAF.Organization),
