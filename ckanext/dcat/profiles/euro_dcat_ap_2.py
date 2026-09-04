@@ -62,7 +62,7 @@ class EuropeanDCATAP2Profile(BaseEuropeanDCATAPProfile):
         # Call base super method for common properties
         super().parse_dataset(dataset_dict, dataset_ref)
 
-        # --- Provenance deserialization ---
+        # --- wasGeneratedBy deserialization ---
         was_generated_by = self.g.value(dataset_ref, PROV.wasGeneratedBy)
         if was_generated_by:
             activity_dict = {}
@@ -81,7 +81,7 @@ class EuropeanDCATAP2Profile(BaseEuropeanDCATAPProfile):
             if agents:
                 activity_dict["wasAssociatedWith"] = [agents[0]] # Only take the first agent
 
-            dataset_dict["provenance_activity"] = [activity_dict]
+            dataset_dict["was_generated_by"] = [activity_dict]
 
         # --- Qualified Attribution ---
         qualified_attributions = self._parse_qualified_attributions(dataset_ref)
@@ -295,8 +295,8 @@ class EuropeanDCATAP2Profile(BaseEuropeanDCATAPProfile):
                 _class=_class,
             )
 
-        # --- Provenance serialization ---
-        activities = dataset_dict.get("provenance_activity", [])
+        # --- wasGeneratedBy serialization ---
+        activities = dataset_dict.get("was_generated_by", [])
 
         for activity in activities:
             activity_uri = URIRef(activity.get("uri")) if activity.get("uri") else BNode()

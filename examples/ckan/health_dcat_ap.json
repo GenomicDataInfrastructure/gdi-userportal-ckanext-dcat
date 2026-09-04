@@ -168,7 +168,7 @@
         "url": "https://www.example.com/hdab"
       }
     ],
-    "provenance_activity": [
+    "was_generated_by": [
       {
         "dct_type": "http://dbpedia.org/resource/Record_linkage",
         "label": "http://dbpedia.org/resource/Record_linkage",
