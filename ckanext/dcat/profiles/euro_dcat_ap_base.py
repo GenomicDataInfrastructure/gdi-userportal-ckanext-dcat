@@ -162,7 +162,7 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                 agents = self._agents_details(dataset_ref, predicate)
                 if agents:
                     agent = agents[0]
-                    for key in ("uri", "name", "email", "url", "type", "identifier"):
+                    for key in ("uri", "name", "email", "url", "type", "identifier", "country"):
                         if agent.get(key):
                             dataset_dict["extras"].append(
                                 {
@@ -462,6 +462,7 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                 "url": self._get_dataset_value(dataset_dict, "publisher_url"),
                 "type": self._get_dataset_value(dataset_dict, "publisher_type"),
                 "identifier": self._get_dataset_value(dataset_dict, "publisher_identifier"),
+                "country": self._get_dataset_value(dataset_dict, "publisher_country"),
             }
         elif dataset_dict.get("organization"):
             # Fall back to dataset org
@@ -498,6 +499,7 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                 ("url", FOAF.homepage, None, URIRef),
                 ("type", DCT.type, None, URIRefOrLiteral),
                 ("identifier", DCT.identifier, None, URIRefOrLiteral),
+                ("country", DCT.spatial, None, URIRefOrLiteral),
             ]
             self._add_triples_from_dict(publisher_details, publisher_ref, items)
 
@@ -528,6 +530,7 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                 "url": self._get_dataset_value(dataset_dict, "creator_url"),
                 "type": self._get_dataset_value(dataset_dict, "creator_type"),
                 "identifier": self._get_dataset_value(dataset_dict, "creator_identifier"),
+                "country": self._get_dataset_value(dataset_dict, "creator_country"),
             }
 
         # Add to graph
@@ -540,6 +543,7 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                 ("url", FOAF.homepage, None, URIRef),
                 ("type", DCT.type, None, URIRefOrLiteral),
                 ("identifier", DCT.identifier, None, URIRefOrLiteral),
+                ("country", DCT.spatial, None, URIRefOrLiteral),
             ]
             self._add_triples_from_dict(creator_details, creator_ref, items)
 

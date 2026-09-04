@@ -369,6 +369,13 @@ class EuropeanDCATAPSchemingProfile(RDFProfile):
                     "identifier",
                     _type=URIRefOrLiteral,
                 )
+                self._add_triple_from_dict(
+                    agent,
+                    agent_ref,
+                    DCT.spatial,
+                    "country",
+                    _type=URIRefOrLiteral,
+                )
 
     def _relationship_details(self, subject, predicate):
         """

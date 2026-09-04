@@ -192,6 +192,12 @@ class TestSchemingSerializeSupport(BaseSerializeTest):
             DCT.identifier,
             URIRef(dataset_dict["publisher"][0]["identifier"]),
         )
+        assert self._triple(
+            g,
+            publisher[0][2],
+            DCT.spatial,
+            URIRef(dataset_dict["publisher"][0]["country"]),
+        )
 
         creator = [t for t in g.triples((dataset_ref, DCT.creator, None))]
 
@@ -222,6 +228,12 @@ class TestSchemingSerializeSupport(BaseSerializeTest):
             creator[0][2],
             DCT.identifier,
             URIRef(dataset_dict["creator"][0]["identifier"]),
+        )
+        assert self._triple(
+            g,
+            creator[0][2],
+            DCT.spatial,
+            URIRef(dataset_dict["creator"][0]["country"]),
         )
 
         temporal = [t for t in g.triples((dataset_ref, DCT.temporal, None))]

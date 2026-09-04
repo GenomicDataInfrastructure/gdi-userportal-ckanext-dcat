@@ -541,8 +541,8 @@ class RDFProfile(object):
                 <dct:type rdf:resource="http://purl.org/adms/publishertype/NonProfitOrganisation"/>
             </foaf:Organization>
 
-        Returns keys for uri, name, email, url, type, and identifier with the values set to
-        an empty string if they could not be found.
+        Returns keys for uri, name, email, url, type, identifier, and country with the values
+        set to an empty string if they could not be found.
         """
 
         agents = []
@@ -585,6 +585,7 @@ class RDFProfile(object):
             agent_details["url"] = self._object_value(agent, FOAF.homepage)
             agent_details["type"] = self._object_value(agent, DCT.type)
             agent_details["identifier"] = self._object_value(agent, DCT.identifier)
+            agent_details["country"] = self._object_value(agent, DCT.spatial)
 
             acted_orgs = self._agents_details(agent, PROV.actedOnBehalfOf)
             if acted_orgs:
@@ -949,6 +950,8 @@ class RDFProfile(object):
             self.g.add((agent_ref, DCT.type, URIRef(agent_dict["type"])))
         if agent_dict.get("identifier"):
             self.g.add((agent_ref, DCT.identifier, Literal(agent_dict["identifier"])))
+        if agent_dict.get("country"):
+            self.g.add((agent_ref, DCT.spatial, URIRefOrLiteral(agent_dict["country"])))
 
         for sub_org in agent_dict.get("actedOnBehalfOf", []):
             if sub_org.get("name") or sub_org.get("name_translated"):
