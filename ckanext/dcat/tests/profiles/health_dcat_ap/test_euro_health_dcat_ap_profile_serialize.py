@@ -112,10 +112,10 @@ class TestEuroDCATAP3ProfileSerializeDataset(BaseSerializeTest):
         activity_node = provenance[0][2]
         activity_items = [
             (RDF.type, PROV.Activity),
-            (RDFS.label, Literal(dataset_dict["provenance_activity"][0]["label"])),
-            (RDFS.seeAlso, URIRef(dataset_dict["provenance_activity"][0]["seeAlso"])),
-            (DCT.type, URIRef(dataset_dict["provenance_activity"][0]["dct_type"])),
-            (PROV.startedAtTime, Literal(dataset_dict["provenance_activity"][0]["startedAtTime"], datatype=XSD.dateTime)),
+            (RDFS.label, Literal(dataset_dict["was_generated_by"][0]["label"])),
+            (RDFS.seeAlso, URIRef(dataset_dict["was_generated_by"][0]["seeAlso"])),
+            (DCT.type, URIRef(dataset_dict["was_generated_by"][0]["dct_type"])),
+            (PROV.startedAtTime, Literal(dataset_dict["was_generated_by"][0]["startedAtTime"], datatype=XSD.dateTime)),
         ]
         for predicate, value in activity_items:
             assert self._triple(g, activity_node, predicate, value), f"Provenance {predicate} mismatch"
@@ -125,15 +125,15 @@ class TestEuroDCATAP3ProfileSerializeDataset(BaseSerializeTest):
         agent_node = agent_triple[0]
         agent_items = [
             (RDF.type, PROV.Agent),
-            (FOAF.name, Literal(dataset_dict["provenance_activity"][0]["wasAssociatedWith"][0]["name"])),
-            (FOAF.homepage, URIRef(dataset_dict["provenance_activity"][0]["wasAssociatedWith"][0]["homepage"])),
-            (FOAF.mbox, URIRef(dataset_dict["provenance_activity"][0]["wasAssociatedWith"][0]["email"])),
+            (FOAF.name, Literal(dataset_dict["was_generated_by"][0]["wasAssociatedWith"][0]["name"])),
+            (FOAF.homepage, URIRef(dataset_dict["was_generated_by"][0]["wasAssociatedWith"][0]["homepage"])),
+            (FOAF.mbox, URIRef(dataset_dict["was_generated_by"][0]["wasAssociatedWith"][0]["email"])),
         ]
 
         acted_on = list(g.objects(agent_node, PROV.actedOnBehalfOf))
         assert len(acted_on) == 1
         org_node = acted_on[0]
-        assert self._triple(g, org_node, FOAF.name, Literal(dataset_dict["provenance_activity"][0]["wasAssociatedWith"][0]["actedOnBehalfOf"][0]["name"]))
+        assert self._triple(g, org_node, FOAF.name, Literal(dataset_dict["was_generated_by"][0]["wasAssociatedWith"][0]["actedOnBehalfOf"][0]["name"]))
 
         # Test qualified attribution (DCAT reuses PROV-O for this)
         attributions = [t for t in g.triples((dataset_ref, PROV.qualifiedAttribution, None))]
