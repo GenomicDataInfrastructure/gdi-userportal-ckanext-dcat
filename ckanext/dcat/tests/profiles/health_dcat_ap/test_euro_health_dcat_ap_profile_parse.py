@@ -125,6 +125,15 @@ class TestSchemingParseSupport(BaseParseTest):
         assert dataset["publisher"][0]["name"] == "Contact Point"
         assert dataset["publisher"][0]["email"] == "info@example.com"
         assert dataset["publisher"][0]["url"] == "https://healthdata.nl"
+        assert (
+            dataset["publisher"][0]["country"]
+            == "http://publications.europa.eu/resource/authority/country/NLD"
+        )
+
+        assert (
+            dataset["creator"][0]["country"]
+            == "http://publications.europa.eu/resource/authority/country/BEL"
+        )
 
         assert len(dataset["qualified_relation"]) == 1
         assert (
