@@ -190,10 +190,10 @@ class TestSchemingParseSupport(BaseParseTest):
             }
         ]
 
-        provenance_activity = dataset["provenance_activity"]
-        assert len(provenance_activity) == 1
+        was_generated_by = dataset["was_generated_by"]
+        assert len(was_generated_by) == 1
 
-        activity = provenance_activity[0]
+        activity = was_generated_by[0]
         assert activity["uri"] == "internalURI:wasGeneratedBy0"
         assert activity["label"] == "http://dbpedia.org/resource/Record_linkage"
         assert activity["seeAlso"] == (
