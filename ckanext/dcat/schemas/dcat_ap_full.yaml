@@ -336,7 +336,7 @@ dataset_fields:
           repeating_subfields:
             - field_name: name
               label: Organization Name
-  help_text: Structured wasGeneratedBy activity information, including agent and organization.
+  help_text: Structured activity information (per prov:wasGeneratedBy), including agent and organization.
 
 # Add qualified_attribution field here, just before the commented-out hvd_category field
 - field_name: qualified_attribution
