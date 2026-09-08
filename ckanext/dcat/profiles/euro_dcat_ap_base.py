@@ -499,7 +499,7 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                 ("url", FOAF.homepage, None, URIRef),
                 ("type", DCT.type, None, URIRefOrLiteral),
                 ("identifier", DCT.identifier, None, URIRefOrLiteral),
-                ("country", DCT.spatial, None, URIRefOrLiteral),
+                ("country", DCT.spatial, None, URIRef),
             ]
             self._add_triples_from_dict(publisher_details, publisher_ref, items)
 
@@ -543,7 +543,7 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                 ("url", FOAF.homepage, None, URIRef),
                 ("type", DCT.type, None, URIRefOrLiteral),
                 ("identifier", DCT.identifier, None, URIRefOrLiteral),
-                ("country", DCT.spatial, None, URIRefOrLiteral),
+                ("country", DCT.spatial, None, URIRef),
             ]
             self._add_triples_from_dict(creator_details, creator_ref, items)
 

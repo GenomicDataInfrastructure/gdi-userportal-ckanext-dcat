@@ -951,7 +951,7 @@ class RDFProfile(object):
         if agent_dict.get("identifier"):
             self.g.add((agent_ref, DCT.identifier, Literal(agent_dict["identifier"])))
         if agent_dict.get("country"):
-            self.g.add((agent_ref, DCT.spatial, URIRefOrLiteral(agent_dict["country"])))
+            self.g.add((agent_ref, DCT.spatial, URIRef(agent_dict["country"])))
 
         for sub_org in agent_dict.get("actedOnBehalfOf", []):
             if sub_org.get("name") or sub_org.get("name_translated"):
