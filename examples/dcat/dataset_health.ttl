@@ -73,7 +73,8 @@
                                           foaf:homepage  <https://healthdata.nl>;
                                           foaf:mbox      <mailto:info@example.com>;
                                           foaf:name      "Contact Point"@en ,
-                                                         "Contactpunt"@nl
+                                                         "Contactpunt"@nl;
+                                          dct:spatial    <http://publications.europa.eu/resource/authority/country/NLD>
                                         ];
         dct:relation                    <http://example.com/dataset/9876543210>;
         dcat:qualifiedRelation [
@@ -153,7 +154,8 @@
         a              foaf:Agent;
         foaf:homepage  <https:/example.com/homepage>;
         foaf:mbox      <mailto:info@example.com>;
-        foaf:name      "Contact Point"@en , "Contactpunt"@nl .
+        foaf:name      "Contact Point"@en , "Contactpunt"@nl;
+        dct:spatial    <http://publications.europa.eu/resource/authority/country/BEL> .
 
 <internalURI:admsIdentifier0>
         a                  adms:Identifier;

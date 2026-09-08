@@ -72,7 +72,8 @@
             "email": "creator@example.org",
             "url": "https://example.org",
             "identifier": "http://example.org/creator-id",
-            "type": "public_body"
+            "type": "public_body",
+            "country": "http://publications.europa.eu/resource/authority/country/NLD"
         }
     ],
     "creator": [
@@ -81,7 +82,8 @@
             "email": "creator@example.org",
             "url": "https://example.org",
             "identifier": "http://example.org/creator-id",
-            "type": "public_body"
+            "type": "public_body",
+            "country": "http://publications.europa.eu/resource/authority/country/NLD"
         }
     ],
     "publisher": [
@@ -90,7 +92,8 @@
             "email": "publisher@example.org",
             "url": "https://example.org",
             "identifier": "http://example.org/publisher-id",
-            "type": "public_body"
+            "type": "public_body",
+            "country": "http://publications.europa.eu/resource/authority/country/BEL"
         }
     ],
     "temporal_coverage": [
