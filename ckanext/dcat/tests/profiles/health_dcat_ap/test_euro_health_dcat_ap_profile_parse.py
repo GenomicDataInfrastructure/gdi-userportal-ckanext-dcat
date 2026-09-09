@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
     "scheming.presets",
     "ckanext.scheming:presets.json ckanext.dcat.schemas:presets.yaml",
 )
-@pytest.mark.ckan_config("ckanext.dcat.rdf.profiles", "euro_health_dcat_ap")
+@pytest.mark.ckan_config("ckanext.dcat.rdf.profiles", "euro_health_dcat_ap euro_dcat_ap_nl")
 class TestSchemingParseSupport(BaseParseTest):
     def test_e2e_dcat_to_ckan(self):
         """
