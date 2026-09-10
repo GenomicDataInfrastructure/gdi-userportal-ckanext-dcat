@@ -74,7 +74,7 @@ class EuropeanHealthDCATAPProfile(EuropeanDCATAP3Profile):
         quality_annotations = self._parse_quality_annotation(dataset_ref)
         if quality_annotations:
             dataset_dict["quality_annotation"] = quality_annotations
-            
+
         # Dataset-level retention
         dataset_dict["retention_period"] = self._parse_retention_period(dataset_ref)
 

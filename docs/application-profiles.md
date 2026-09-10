@@ -8,6 +8,50 @@ specific application profiles.
     check the documentation on [writing custom profiles](writing-profiles.md) and the 
     [contribution guidelines](contributing.md#including-new-profiles).
 
+## DCAT-AP-NL
+
+### Introduction
+
+This extension contains a profile (`euro_dcat_ap_nl`) implementing the properties that
+[DCAT-AP-NL 3.0](https://docs.geostandaarden.nl/dcat/dcat-ap-nl30/), the Dutch national extension
+of DCAT-AP 3, adds on top of core DCAT-AP 3.0.
+
+DCAT-AP-NL mostly tightens cardinality and usage guidance on properties that already exist in
+core DCAT-AP (e.g. restricting `dct:accessRights` to three specific values); those are not
+reimplemented here, as they are already handled by the base DCAT-AP profiles. This profile only
+implements properties that DCAT-AP-NL adds with no equivalent in core DCAT-AP, such as
+`adms:status` on `dcat:Dataset`.
+
+### Usage
+
+`euro_dcat_ap_nl` is a standalone profile, not baked into any other profile's class
+hierarchy — enable it by listing it alongside whichever other profile(s) your deployment
+already uses, so both run in sequence over the same RDF graph/dataset dict. List it last so
+its properties aren't overwritten by a profile that runs after it:
+
+```ini
+ckanext.dcat.rdf.profiles = fairdatapoint_dcat_ap euro_dcat_ap_nl
+```
+
+or on its own:
+
+```ini
+ckanext.dcat.rdf.profiles = euro_dcat_ap_nl
+```
+
+The DCAT-AP-NL profile is an extension of the RDF profile.
+
+For the FAIRDataPoint harvester, the global `ckanext.dcat.rdf.profiles` setting is not
+consulted — each harvest source's own `"profile"` config value is used instead. That value
+also accepts a space-separated list of profile names, e.g.
+`"profile": "fairdatapoint_dcat_ap euro_dcat_ap_nl"`, to opt a given harvest source into
+DCAT-AP-NL properties.
+
+### Field Mapping
+
+For a full overview of how CKAN dataset fields map to DCAT-AP-NL properties, refer to the
+[mapping table](mapping-nl.md#mapping-between-ckan-fields-and-dcat-ap-nl).
+
 ## HealthDCAT-AP
 
 ### Introduction

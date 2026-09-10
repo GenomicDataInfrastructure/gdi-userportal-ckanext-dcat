@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
     "scheming.presets",
     "ckanext.scheming:presets.json ckanext.dcat.schemas:presets.yaml",
 )
-@pytest.mark.ckan_config("ckanext.dcat.rdf.profiles", "euro_health_dcat_ap")
+@pytest.mark.ckan_config("ckanext.dcat.rdf.profiles", "euro_health_dcat_ap euro_dcat_ap_nl")
 class TestSchemingParseSupport(BaseParseTest):
     def test_e2e_dcat_to_ckan(self):
         """
@@ -40,6 +40,10 @@ class TestSchemingParseSupport(BaseParseTest):
         assert len(datasets) == 1
 
         dataset_dict = datasets[0]
+
+        assert dataset_dict["dataset_status"] == (
+            "http://publications.europa.eu/resource/authority/dataset-status/DEVELOP"
+        )
 
         dataset_dict["name"] = "test-dcat-1"
         dataset = call_action("package_create", **dataset_dict)
