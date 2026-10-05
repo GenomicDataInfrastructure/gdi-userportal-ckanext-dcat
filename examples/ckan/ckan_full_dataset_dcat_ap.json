@@ -71,19 +71,15 @@
             "name": "Test Creator",
             "email": "creator@example.org",
             "url": "https://example.org",
-            "identifier": "http://example.org/creator-id",
+            "identifier": [
+                "http://example.org/creator-id",
+                "http://example.org/creator-orcid"
+            ],
             "type": "public_body",
-            "country": "http://publications.europa.eu/resource/authority/country/NLD"
-        }
-    ],
-    "creator": [
-        {
-            "name": "Test Creator",
-            "email": "creator@example.org",
-            "url": "https://example.org",
-            "identifier": "http://example.org/creator-id",
-            "type": "public_body",
-            "country": "http://publications.europa.eu/resource/authority/country/NLD"
+            "country": [
+                "http://publications.europa.eu/resource/authority/country/NLD",
+                "http://publications.europa.eu/resource/authority/country/DEU"
+            ]
         }
     ],
     "publisher": [
@@ -91,9 +87,13 @@
             "name": "Test Publisher",
             "email": "publisher@example.org",
             "url": "https://example.org",
-            "identifier": "http://example.org/publisher-id",
+            "identifier": [
+                "http://example.org/publisher-id"
+            ],
             "type": "public_body",
-            "country": "http://publications.europa.eu/resource/authority/country/BEL"
+            "country": [
+                "http://publications.europa.eu/resource/authority/country/BEL"
+            ]
         }
     ],
     "temporal_coverage": [

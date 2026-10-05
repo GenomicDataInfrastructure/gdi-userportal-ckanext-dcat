@@ -885,7 +885,8 @@ class TestBaseRDFProfile(object):
         assert publisher['email'] == 'contact@some.org'
         assert publisher['url'] == 'http://some.org'
         assert publisher['type'] == 'http://purl.org/adms/publishertype/NonProfitOrganisation'
-        assert publisher['identifier'] == 'https://ror.org/05wg1m734'
+        # identifier and country are now multi-valued (lists)
+        assert publisher['identifier'] == ['https://ror.org/05wg1m734']
 
     def test_publisher_ref(self):
 

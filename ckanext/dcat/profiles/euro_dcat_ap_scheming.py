@@ -367,6 +367,7 @@ class EuropeanDCATAPSchemingProfile(RDFProfile):
                     agent_ref,
                     DCT.identifier,
                     "identifier",
+                    list_value=True,
                     _type=URIRefOrLiteral,
                 )
                 self._add_triple_from_dict(
@@ -374,6 +375,7 @@ class EuropeanDCATAPSchemingProfile(RDFProfile):
                     agent_ref,
                     DCT.spatial,
                     "country",
+                    list_value=True,
                     _type=URIRef,
                 )
 

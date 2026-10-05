@@ -584,8 +584,8 @@ class RDFProfile(object):
                 )
             agent_details["url"] = self._object_value(agent, FOAF.homepage)
             agent_details["type"] = self._object_value(agent, DCT.type)
-            agent_details["identifier"] = self._object_value(agent, DCT.identifier)
-            agent_details["country"] = self._object_value(agent, DCT.spatial)
+            agent_details["identifier"] = self._object_value_list(agent, DCT.identifier)
+            agent_details["country"] = self._object_value_list(agent, DCT.spatial)
 
             acted_orgs = self._agents_details(agent, PROV.actedOnBehalfOf)
             if acted_orgs:
@@ -948,10 +948,24 @@ class RDFProfile(object):
             self.g.add((agent_ref, FOAF.homepage, URIRef(agent_dict["homepage"])))
         if agent_dict.get("type"):
             self.g.add((agent_ref, DCT.type, URIRef(agent_dict["type"])))
-        if agent_dict.get("identifier"):
-            self.g.add((agent_ref, DCT.identifier, Literal(agent_dict["identifier"])))
-        if agent_dict.get("country"):
-            self.g.add((agent_ref, DCT.spatial, URIRef(agent_dict["country"])))
+
+        # identifier can be a list or scalar (tolerant reader)
+        identifiers = agent_dict.get("identifier", [])
+        if identifiers:
+            if isinstance(identifiers, str):
+                identifiers = [identifiers]
+            for identifier in identifiers:
+                if identifier:
+                    self.g.add((agent_ref, DCT.identifier, Literal(identifier)))
+
+        # country can be a list or scalar (tolerant reader)
+        countries = agent_dict.get("country", [])
+        if countries:
+            if isinstance(countries, str):
+                countries = [countries]
+            for country in countries:
+                if country:
+                    self.g.add((agent_ref, DCT.spatial, URIRef(country)))
 
         for sub_org in agent_dict.get("actedOnBehalfOf", []):
             if sub_org.get("name") or sub_org.get("name_translated"):

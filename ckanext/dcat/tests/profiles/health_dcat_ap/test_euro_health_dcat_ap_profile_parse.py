@@ -131,12 +131,12 @@ class TestSchemingParseSupport(BaseParseTest):
         assert dataset["publisher"][0]["url"] == "https://healthdata.nl"
         assert (
             dataset["publisher"][0]["country"]
-            == "http://publications.europa.eu/resource/authority/country/NLD"
+            == ["http://publications.europa.eu/resource/authority/country/NLD"]
         )
 
         assert (
             dataset["creator"][0]["country"]
-            == "http://publications.europa.eu/resource/authority/country/BEL"
+            == ["http://publications.europa.eu/resource/authority/country/BEL"]
         )
 
         assert len(dataset["qualified_relation"]) == 1
