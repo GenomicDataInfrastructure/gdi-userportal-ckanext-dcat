@@ -1012,16 +1012,14 @@ class TestSchemingParseSupport(BaseParseTest):
         assert len(dataset["publisher"]) == 2
         assert dataset["publisher"][0]["name"] == "Test Publisher 1"
         assert dataset["publisher"][0]["email"] == "publisher1@example.org"
-        assert (
-            dataset["publisher"][0]["identifier"]
-            == "https://orcid.org/0000-0002-9095-9201"
-        )
+        assert dataset["publisher"][0]["identifier"] == [
+            "https://orcid.org/0000-0002-9095-9201"
+        ]
         assert dataset["publisher"][1]["name"] == "Test Publisher 2"
         assert dataset["publisher"][1]["email"] == "publisher2@example.org"
-        assert (
-            dataset["publisher"][1]["identifier"]
-            == "https://orcid.org/0000-0002-9095-9202"
-        )
+        assert dataset["publisher"][1]["identifier"] == [
+            "https://orcid.org/0000-0002-9095-9202"
+        ]
 
     def test_multiple_creators(self):
 
