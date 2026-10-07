@@ -131,12 +131,12 @@ class TestSchemingParseSupport(BaseParseTest):
         assert dataset["publisher"][0]["url"] == "https://healthdata.nl"
         assert (
             dataset["publisher"][0]["country"]
-            == "http://publications.europa.eu/resource/authority/country/NLD"
+            == ["http://publications.europa.eu/resource/authority/country/NLD"]
         )
 
         assert (
             dataset["creator"][0]["country"]
-            == "http://publications.europa.eu/resource/authority/country/BEL"
+            == ["http://publications.europa.eu/resource/authority/country/BEL"]
         )
 
         assert len(dataset["qualified_relation"]) == 1
@@ -239,8 +239,8 @@ class TestSchemingParseSupport(BaseParseTest):
         assert agent["email"] == "healthdata@sciensano.be"
         assert agent["url"] == "https://healthdata.be"
         assert agent["type"] == ""
-        assert agent["identifier"] == ""
-        
+        assert agent["identifier"] == []
+
         # DQV Quality Annotation
         assert len(dataset["quality_annotation"]) == 1
         assert dataset["quality_annotation"][0]["body"] == "https://certificates.theodi.org/en/datasets/393/certificate"

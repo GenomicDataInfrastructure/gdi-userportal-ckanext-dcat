@@ -186,18 +186,22 @@ class TestSchemingSerializeSupport(BaseSerializeTest):
             DCT.type,
             dataset_dict["publisher"][0]["type"],
         )
-        assert self._triple(
-            g,
-            publisher[0][2],
-            DCT.identifier,
-            URIRef(dataset_dict["publisher"][0]["identifier"]),
-        )
-        assert self._triple(
-            g,
-            publisher[0][2],
-            DCT.spatial,
-            URIRef(dataset_dict["publisher"][0]["country"]),
-        )
+        # Check publisher identifiers (now a list)
+        for identifier in dataset_dict["publisher"][0]["identifier"]:
+            assert self._triple(
+                g,
+                publisher[0][2],
+                DCT.identifier,
+                URIRef(identifier) if identifier.startswith("http") else identifier,
+            )
+        # Check publisher countries (now a list)
+        for country in dataset_dict["publisher"][0]["country"]:
+            assert self._triple(
+                g,
+                publisher[0][2],
+                DCT.spatial,
+                URIRef(country),
+            )
 
         creator = [t for t in g.triples((dataset_ref, DCT.creator, None))]
 
@@ -223,18 +227,22 @@ class TestSchemingSerializeSupport(BaseSerializeTest):
             DCT.type,
             dataset_dict["creator"][0]["type"],
         )
-        assert self._triple(
-            g,
-            creator[0][2],
-            DCT.identifier,
-            URIRef(dataset_dict["creator"][0]["identifier"]),
-        )
-        assert self._triple(
-            g,
-            creator[0][2],
-            DCT.spatial,
-            URIRef(dataset_dict["creator"][0]["country"]),
-        )
+        # Check creator identifiers (now a list)
+        for identifier in dataset_dict["creator"][0]["identifier"]:
+            assert self._triple(
+                g,
+                creator[0][2],
+                DCT.identifier,
+                URIRef(identifier) if identifier.startswith("http") else identifier,
+            )
+        # Check creator countries (now a list)
+        for country in dataset_dict["creator"][0]["country"]:
+            assert self._triple(
+                g,
+                creator[0][2],
+                DCT.spatial,
+                URIRef(country),
+            )
 
         temporal = [t for t in g.triples((dataset_ref, DCT.temporal, None))]
 
@@ -1004,16 +1012,14 @@ class TestSchemingParseSupport(BaseParseTest):
         assert len(dataset["publisher"]) == 2
         assert dataset["publisher"][0]["name"] == "Test Publisher 1"
         assert dataset["publisher"][0]["email"] == "publisher1@example.org"
-        assert (
-            dataset["publisher"][0]["identifier"]
-            == "https://orcid.org/0000-0002-9095-9201"
-        )
+        assert dataset["publisher"][0]["identifier"] == [
+            "https://orcid.org/0000-0002-9095-9201"
+        ]
         assert dataset["publisher"][1]["name"] == "Test Publisher 2"
         assert dataset["publisher"][1]["email"] == "publisher2@example.org"
-        assert (
-            dataset["publisher"][1]["identifier"]
-            == "https://orcid.org/0000-0002-9095-9202"
-        )
+        assert dataset["publisher"][1]["identifier"] == [
+            "https://orcid.org/0000-0002-9095-9202"
+        ]
 
     def test_multiple_creators(self):
 

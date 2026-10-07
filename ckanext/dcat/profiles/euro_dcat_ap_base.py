@@ -163,11 +163,16 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
                 if agents:
                     agent = agents[0]
                     for key in ("uri", "name", "email", "url", "type", "identifier", "country"):
-                        if agent.get(key):
+                        value = agent.get(key)
+                        # Extras hold a single string; identifier and country are
+                        # lists in the shared agent parser, keep the first one.
+                        if isinstance(value, list):
+                            value = value[0] if value else None
+                        if value:
                             dataset_dict["extras"].append(
                                 {
                                     "key": f"{agent_key}_{key}",
-                                    "value": agent.get(key)
+                                    "value": value
                                 }
                             )
 

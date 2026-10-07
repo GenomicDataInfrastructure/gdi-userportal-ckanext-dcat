@@ -207,7 +207,6 @@ class EuropeanDCATAP2Profile(BaseEuropeanDCATAPProfile):
                             ("language", DCT.language),
                             ("rights", DCT.rights),
                             ("landing_page", DCAT.landingPage),
-                            ("keyword", DCAT.keyword),
                             ("applicable_legislation", DCATAP.applicableLegislation),
                             ("theme", DCAT.theme),
                             ("hvd_category", DCATAP.hvdCategory),
@@ -215,6 +214,16 @@ class EuropeanDCATAP2Profile(BaseEuropeanDCATAPProfile):
                             values = self._object_value_list(access_service, predicate)
                             if values:
                                 access_service_dict[key] = values
+
+                        # Parse keywords with language support
+                        keywords_translated = self._object_value_list_multilingual(
+                            access_service, DCAT.keyword)
+                        if any(keywords_translated.values()):
+                            access_service_dict["keyword_translated"] = keywords_translated
+                        # Also add plain keywords for backward compatibility
+                        keyword_list = self._object_value_list(access_service, DCAT.keyword)
+                        if keyword_list:
+                            access_service_dict["keyword"] = keyword_list
 
                         contact_points = self._contact_details(access_service, DCAT.contactPoint)
                         if contact_points:
@@ -538,15 +547,29 @@ class EuropeanDCATAP2Profile(BaseEuropeanDCATAPProfile):
                     _type=URIRefOrLiteral
                 )
 
-                # Add keyword list
-                self._add_triple_from_dict(
-                    access_service_dict,
-                    access_service_node,
-                    DCAT.keyword,
-                    "keyword",
-                    list_value=True,
-                    _type=Literal
-                )
+                # Add keyword list - multilingual support
+                keyword_translated = access_service_dict.get("keyword_translated")
+                if isinstance(keyword_translated, dict) and any(keyword_translated.values()):
+                    # Add multilingual keywords with language tags
+                    for lang, keywords in keyword_translated.items():
+                        if keywords and isinstance(keywords, list):
+                            for keyword in keywords:
+                                if keyword:
+                                    self.g.add((
+                                        access_service_node,
+                                        DCAT.keyword,
+                                        Literal(keyword, lang=lang)
+                                    ))
+                else:
+                    # Fallback to plain keywords for backward compatibility
+                    self._add_triple_from_dict(
+                        access_service_dict,
+                        access_service_node,
+                        DCAT.keyword,
+                        "keyword",
+                        list_value=True,
+                        _type=Literal
+                    )
 
                 #  Lists
                 items = [
