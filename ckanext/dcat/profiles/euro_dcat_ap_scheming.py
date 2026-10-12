@@ -63,6 +63,37 @@ class EuropeanDCATAPSchemingProfile(RDFProfile):
 
         return details
 
+    def _spatial_coverage_details(self, dataset_ref):
+        spatial_coverage = []
+
+        for spatial in self.g.objects(dataset_ref, DCT.spatial):
+            details = {}
+
+            if isinstance(spatial, URIRef):
+                details["uri"] = str(spatial)
+
+            if isinstance(spatial, Literal):
+                details["text"] = str(spatial)
+
+            if (spatial, RDF.type, DCT.Location) in self.g:
+                for key, predicate in (
+                    ("geom", LOCN.geometry),
+                    ("bbox", DCAT.bbox),
+                    ("centroid", DCAT.centroid),
+                ):
+                    value = self._parse_geodata(spatial, predicate, None)
+                    if value:
+                        details[key] = value
+
+                for predicate in (SKOS.prefLabel, RDFS.label):
+                    for label in self.g.objects(spatial, predicate):
+                        details["text"] = str(label)
+
+            if details:
+                spatial_coverage.append(details)
+
+        return spatial_coverage
+
     def _temporal_coverage_details(self, dataset_ref):
         temporal_coverage = []
 
@@ -183,6 +214,12 @@ class EuropeanDCATAPSchemingProfile(RDFProfile):
                     temporal_coverage = self._temporal_coverage_details(dataset_ref)
                     if temporal_coverage:
                         dataset_dict[field_name] = temporal_coverage
+                        dataset_dict["extras"] = new_extras
+                        continue
+                if field_name == "spatial_coverage":
+                    spatial_coverage = self._spatial_coverage_details(dataset_ref)
+                    if spatial_coverage:
+                        dataset_dict[field_name] = spatial_coverage
                         dataset_dict["extras"] = new_extras
                         continue
                 if new_dict:
