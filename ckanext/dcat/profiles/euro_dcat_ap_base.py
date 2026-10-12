@@ -222,12 +222,13 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
             )
 
         # Resources
-        distribution_uris = []
+        distribution_uris = [
+            str(distribution) for distribution in self.g.objects(dataset_ref, DCAT.distribution)
+        ]
         for distribution in self._distributions(dataset_ref):
             resource_dict = self._parse_distribution(distribution)
             dataset_dict["resources"].append(resource_dict)
-            distribution_uris.append(str(distribution))
-        
+
         if distribution_uris:
             dataset_dict["distribution"] = distribution_uris
 
@@ -609,12 +610,19 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
             DCT.ProvenanceStatement
         )
 
+        # Samples and analytics are linked by their own property, not as dcat:distribution
+        linked_elsewhere = {
+            CleanedURIRef(uri)
+            for uri in (dataset_dict.get("sample") or []) + (dataset_dict.get("analytics") or [])
+        }
+
         # Resources
         for resource_dict in dataset_dict.get("resources", []):
 
             distribution = CleanedURIRef(resource_uri(resource_dict))
 
-            g.add((dataset_ref, DCAT.distribution, distribution))
+            if distribution not in linked_elsewhere:
+                g.add((dataset_ref, DCAT.distribution, distribution))
 
             g.add((distribution, RDF.type, DCAT.Distribution))
 
