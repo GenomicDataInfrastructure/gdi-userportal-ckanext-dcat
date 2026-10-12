@@ -812,11 +812,12 @@ class TestSchemingParseSupport(BaseParseTest):
         assert dataset["temporal_coverage"][0]["start"] == "1905-03-01"
         assert dataset["temporal_coverage"][0]["end"] == "2013-01-05"
 
-        assert (
-            dataset["spatial_coverage"][0]["uri"]
-            == "http://publications.europa.eu/mdr/authority/country/ZWE"
-        )
-        assert dataset["spatial_coverage"][0]["geom"]
+        # Every dct:spatial is an item of its own: the country and the location
+        assert len(dataset["spatial_coverage"]) == 2
+        assert [i["uri"] for i in dataset["spatial_coverage"] if "uri" in i] == [
+            "http://publications.europa.eu/mdr/authority/country/ZWE"
+        ]
+        assert [i for i in dataset["spatial_coverage"] if i.get("geom")]
 
         assert len(dataset["qualified_relation"]) == 1
         assert (
