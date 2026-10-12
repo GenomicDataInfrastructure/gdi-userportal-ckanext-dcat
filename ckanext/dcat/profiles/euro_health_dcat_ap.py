@@ -37,6 +37,11 @@ class EuropeanHealthDCATAPProfile(EuropeanDCATAP3Profile):
     and Data Services descriptions in Europe.
     """
 
+    def _distributions(self, dataset):
+        # Analytics are distributions too
+        yield from super()._distributions(dataset)
+        yield from self.g.objects(dataset, HEALTHDCATAP.analytics)
+
     def parse_dataset(self, dataset_dict, dataset_ref):
         # Call super method for DCAT-AP 3 properties
         dataset_dict = super(EuropeanHealthDCATAPProfile, self).parse_dataset(
@@ -45,13 +50,9 @@ class EuropeanHealthDCATAPProfile(EuropeanDCATAP3Profile):
 
         dataset_dict = self._parse_health_fields(dataset_dict, dataset_ref)
 
-        analytics_uris = []
-        for analytics_dist in self.g.objects(dataset_ref, HEALTHDCATAP.analytics):
-            if (analytics_dist, RDF.type, DCAT.Distribution) in self.g:
-                resource_dict = self._parse_distribution(analytics_dist)
-                dataset_dict["resources"].append(resource_dict)
-            analytics_uris.append(str(analytics_dist))
-        
+        analytics_uris = [
+            str(analytics) for analytics in self.g.objects(dataset_ref, HEALTHDCATAP.analytics)
+        ]
         if analytics_uris:
             dataset_dict["analytics"] = analytics_uris
 

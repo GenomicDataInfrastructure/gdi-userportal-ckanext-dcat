@@ -20,6 +20,11 @@ class EuropeanDCATAP3Profile(EuropeanDCATAP2Profile, EuropeanDCATAPSchemingProfi
     An RDF profile based on the DCAT-AP 3 for data portals in Europe
     """
 
+    def _distributions(self, dataset):
+        # A sample is a distribution too
+        yield from super()._distributions(dataset)
+        yield from self.g.objects(dataset, ADMS.sample)
+
     def parse_dataset(self, dataset_dict, dataset_ref):
 
         # Call base method for common properties
@@ -31,13 +36,7 @@ class EuropeanDCATAP3Profile(EuropeanDCATAP2Profile, EuropeanDCATAPSchemingProfi
         # DCAT AP v2 scheming fields
         dataset_dict = self._parse_dataset_v2_scheming(dataset_dict, dataset_ref)
 
-        sample_uris = []
-        for sample in self.g.objects(dataset_ref, ADMS.sample):
-            if (sample, RDF.type, DCAT.Distribution) in self.g:
-                resource_dict = self._parse_distribution(sample)
-                dataset_dict["resources"].append(resource_dict)
-            sample_uris.append(str(sample))
-        
+        sample_uris = [str(sample) for sample in self.g.objects(dataset_ref, ADMS.sample)]
         if sample_uris:
             dataset_dict["sample"] = sample_uris
 
