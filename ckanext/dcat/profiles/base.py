@@ -991,6 +991,18 @@ class RDFProfile(object):
 
         return agent_ref
 
+    @staticmethod
+    def _as_dict_list(value):
+        """
+        A dict, or the list of dicts that the parser and repeating subfields give,
+        as a list of dicts. Anything else gives an empty list.
+        """
+        if isinstance(value, dict):
+            return [value] if value else []
+        if isinstance(value, (list, tuple)):
+            return [item for item in value if isinstance(item, dict) and item]
+        return []
+
     def _add_contact_to_graph(self, subject, predicate, contact):
         contact_uri = contact.get("uri")
         if contact_uri:
