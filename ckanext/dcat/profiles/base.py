@@ -1019,13 +1019,13 @@ class RDFProfile(object):
             "identifier",
             _type=URIRefOrLiteral,
         )
-        self._add_triple_from_dict(
-            contact,
-            contact_details,
-            VCARD.hasURL,
-            "url",
-            _type=URIRef,
-        )
+        # contact["url"] is a list when it comes from the parser or a multiple_text field
+        urls = self._get_dict_value(contact, "url")
+        if isinstance(urls, str):
+            urls = [urls]
+        for url in urls or []:
+            if url:
+                self.g.add((contact_details, VCARD.hasURL, CleanedURIRef(url)))
 
     def _add_spatial_value_to_graph(self, spatial_ref, predicate, value):
         """
