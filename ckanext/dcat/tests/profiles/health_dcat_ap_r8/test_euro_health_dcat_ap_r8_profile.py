@@ -21,6 +21,7 @@ from ckanext.dcat.profiles import (
 )
 
 DCAT = Namespace("http://www.w3.org/ns/dcat#")
+SKOS = Namespace("http://www.w3.org/2004/02/skos/core#")
 DPV = Namespace("https://w3id.org/dpv#")
 DQV = Namespace("http://www.w3.org/ns/dqv#")
 OA = Namespace("http://www.w3.org/ns/oa#")
@@ -177,11 +178,35 @@ class TestTypedObjects:
         assert (URIRef(iri), RDF.type, rdf_class) in graph
         assert values(graph, predicate) == [URIRef(iri)]
 
-    def test_a_literal_is_left_without_a_type(self):
-        graph = serialize({"legal_basis": ["consent"]})
+    @pytest.mark.parametrize("key", ["health_category", "health_theme"])
+    def test_a_vocabulary_concept_iri_is_not_typed(self, key):
+        """The EU vocabularies supply the class and the preferred label a typed concept needs."""
+        iri = "https://hdeu-dcat.data.health.europa.eu/resource/authority/healthcategories/EHRS"
 
-        assert values(graph, DPV.hasLegalBasis) == [Literal("consent")]
-        assert not list(graph.subjects(RDF.type, DPV.LegalBasis))
+        graph = serialize({key: [iri]})
+
+        assert not list(graph.objects(URIRef(iri), RDF.type))
+
+    @pytest.mark.parametrize(
+        "key, predicate, rdf_class, text_predicate",
+        [
+            ("coding_system", HEALTHDCATAP.hasCodingSystem, DCT.Standard, DCT.title),
+            ("health_category", HEALTHDCATAP.healthCategory, SKOS.Concept, SKOS.prefLabel),
+            ("legal_basis", DPV.hasLegalBasis, DPV.LegalBasis, DCT.description),
+            ("purpose", DPV.hasPurpose, DPV.Purpose, DCT.description),
+        ],
+    )
+    def test_free_text_becomes_a_typed_node_holding_the_text(self, key, predicate, rdf_class, text_predicate):
+        graph = serialize({key: ["Consent under the EHDS"]})
+
+        (node,) = values(graph, predicate)
+        assert (node, RDF.type, rdf_class) in graph
+        assert values(graph, text_predicate, node) == [Literal("Consent under the EHDS")]
+
+    def test_the_text_of_the_typed_node_is_read_back(self):
+        graph = serialize({"legal_basis": ["Consent under the EHDS"]})
+
+        assert _profile(graph).parse_dataset({"extras": []}, DATASET)["legal_basis"] == ["Consent under the EHDS"]
 
     def test_the_health_dcat_ap_profile_does_not_write_the_types(self):
         graph = serialize({"legal_basis": ["http://example.org/thing"]}, EuropeanHealthDCATAPProfile)

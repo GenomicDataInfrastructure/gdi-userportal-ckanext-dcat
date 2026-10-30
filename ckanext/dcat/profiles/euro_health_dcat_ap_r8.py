@@ -3,7 +3,7 @@ import logging
 
 from rdflib import DCAT, FOAF, RDF, RDFS, XSD, BNode, Literal, URIRef
 from rdflib.namespace import DCTERMS as DCT
-from rdflib.namespace import Namespace
+from rdflib.namespace import SKOS, Namespace
 
 from ckanext.dcat.profiles.base import VCARD, CleanedURIRef
 from ckanext.dcat.utils import resource_uri
@@ -52,13 +52,20 @@ LEGACY_AGENT_PREDICATES = (
     HEALTHDCATAP.publisherType,
 )
 
-# R8 types the IRIs behind these properties; the data they point to usually carries no type
-# of its own, and the shapes check the class (HealthDCAT-AP R8, ranges/range.ttl).
+# R8 types what these properties point to (HealthDCAT-AP R8, ranges/range.ttl). Free text
+# cannot have a class, so it becomes a typed node holding the text in the given property.
+# An IRI gets the class too, where the data behind it usually carries none: the dpv
+# vocabulary is not imported by R8's validation, and a coding system is a dct:Standard.
+# A health category or theme IRI stays as it is: it is a concept of the EU vocabularies, which
+# supply the class and the preferred label that a typed concept would be required to have.
 TYPED_OBJECTS = (
-    (HEALTHDCATAP.hasCodingSystem, DCT.Standard),
-    (DPV.hasLegalBasis, DPV.LegalBasis),
-    (DPV.hasPersonalData, DPV.PersonalData),
-    (DPV.hasPurpose, DPV.Purpose),
+    # predicate, class, property for free text, type an IRI
+    (HEALTHDCATAP.hasCodingSystem, DCT.Standard, DCT.title, True),
+    (HEALTHDCATAP.healthCategory, SKOS.Concept, SKOS.prefLabel, False),
+    (HEALTHDCATAP.healthTheme, SKOS.Concept, SKOS.prefLabel, False),
+    (DPV.hasLegalBasis, DPV.LegalBasis, DCT.description, True),
+    (DPV.hasPersonalData, DPV.PersonalData, DCT.description, True),
+    (DPV.hasPurpose, DPV.Purpose, DCT.description, True),
 )
 
 # R8 allows several values where the CKAN field holds one. The field stays single-valued
@@ -160,10 +167,17 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
             )
 
     def _type_the_objects(self, dataset_ref):
-        for predicate, rdf_class in TYPED_OBJECTS:
-            for value in self.g.objects(dataset_ref, predicate):
+        for predicate, rdf_class, text_predicate, type_iris in TYPED_OBJECTS:
+            for value in list(self.g.objects(dataset_ref, predicate)):
                 if isinstance(value, URIRef):
-                    self.g.add((value, RDF.type, rdf_class))
+                    if type_iris:
+                        self.g.add((value, RDF.type, rdf_class))
+                elif isinstance(value, Literal):
+                    self.g.remove((dataset_ref, predicate, value))
+                    node = BNode()
+                    self.g.add((dataset_ref, predicate, node))
+                    self.g.add((node, RDF.type, rdf_class))
+                    self.g.add((node, text_predicate, value))
 
     def _write_code_values_as_literals(self, dataset_ref):
         """R8 gives hasCodeValues a literal range; the HealthDCAT-AP profile writes an IRI for http(s) values."""
