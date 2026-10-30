@@ -19,6 +19,53 @@ Which earlier release the implementation matches does not matter; what matters i
 - Seven findings (D1 to D7; D7 is latent and D5 is documentation drift) found while verifying, independent of R8 (section 5): a contact `url` list is written back as a corrupted IRI (D1), and serializing a dataset whose distribution has a data service with a contact or publisher crashes (D6).
 - Where the work lands: the dataset schema is generated from the profile packs of `ckanext-gdi-userportal`, not from the health schemas of this repository (those are used by tests only). Parsing and serializing is in this repository (`ckanext-dcat`); the FDP profile only adds tag sanitising and label resolution on top.
 
+## Status after the `healthdcat_r8` profile
+
+The tables below are the baseline of this analysis (commit `81bdc95`) and stay as they were. The
+`healthdcat_r8` pack (`euro_health_dcat_ap_r8` profile, `ckanext-gdi-userportal` pack) changes the
+status of **51 of the 187 rows**: SAME goes from 82 to **133**, CHANGED from 44 to **27**, NEW from 61 to **27**.
+The profile builds on the HealthDCAT-AP profile, so the `gdi_current` chain does not change. The
+shared fixes below are the exception (section 5, D1, D4 and D6).
+
+**Checked** on R8's example (`example-healthdcat-dataset.ttl`, non-public) by parsing it, serializing the
+result and validating that with pyshacl against each layer's shapes (public / restricted / non-public):
+
+| | public | restricted | non-public |
+|---|---|---|---|
+| R8's own example | 9 | 9 | 8 |
+| Round trip with the `gdi_current` chain (before) | 20 | 20 | 19 |
+| Round trip with the R8 profile | 9 | 9 | 8 |
+
+Every remaining result is one the original example has too: `dcat:byteSize` as `xsd:nonNegativeInteger`
+against the `xsd:decimal` of the DCAT-AP shape, the class checks on the vocabulary concepts (the EU
+vocabularies are not imported), two distribution counts, and the access rights of a non-public dataset
+against the public and restricted shapes (section 6). R8's second example, AGORA, gives 0 / 1 / 1 as it is
+and 2 / 3 / 3 after the round trip; the two extra are the class checks of its health category and theme,
+whose concept definitions sit in the AGORA file itself.
+
+**SAME now (51 rows).** Dataset (16): 2 alternative, 5 code values, 6 coding system, 8 contact point (D1),
+10 custodian, 18 structured data, 19 variables, 26 legal basis, 31 personal data, 34 publisher,
+35 purpose, 38 quality annotation, 40 related resource, 43 source, 52 hdab, 53 hdab coordinator.
+Other classes (35): health data access body 1; hdab coordinator 1 to 3; publisher 1 and 2; custodian 1 to 3;
+contact point 1 to 5; temporal entity 1 and 2; CSVW table group 1 and 2, table 1 to 4, column 1 to 5; data
+service 1, 4 and 13 (D6) and 6; distribution 11 and 16; contact (`vcard:Kind`) 1 (D1); dataset series
+2 (D1, through the same function, not run on a series).
+
+**Still CHANGED, by decision.** Row 21 `identifier` stays single-valued (ADR 0001, Q3): the R8 profile
+keeps the first value and logs a warning when it drops others. Rows 48 and 54, the distribution access
+URL, download URL and rights, the data service title, description and endpoint description, and the
+relationship role and relation became lists after this status was recorded; see
+[mapping-healthdcat.md](mapping-healthdcat.md). The counts above predate that.
+
+**Not done.** Four shared fixes that change `gdi_current` output and were not in the list of defects
+to fix: the identifier `skos:notation` (rows 30, ID-1; D4 now gives a blank-node identifier its notation, an
+IRI node still gives its IRI), the retention period dates typed as `xsd:date` (41, POT-3, POT-4), the
+first activity only (51) and a byte size of 0 (DIST-5). D2 and D3 are not needed by an R8 property.
+Deferred and untouched: licence type, Concept and ConceptScheme, the series subfields
+(SER-5, SER-7). Catalogue and CatalogueRecord are out of scope. Existing Wikidata and ADMS values are not
+mapped to the hdeu-dcat vocabularies (section 4): there is no crosswalk; only a bare authority code is
+written as its IRI.
+
 ## Gap overview by class
 
 Counts per R8 class. R8-specific gaps are CHANGED or NEW rows that R8 marks as extended (E) or profile specific (P); DCAT-AP 3 gaps are CHANGED or NEW rows that R8 reuses as-is (A). The reuse flag of the Dataset rows comes from R8's rules file, which carries it per property and per access level; it differs between levels for 12 properties, and a Dataset row counts as E or P when any level flags it so. Details per property are in sections 1 and 2b.
