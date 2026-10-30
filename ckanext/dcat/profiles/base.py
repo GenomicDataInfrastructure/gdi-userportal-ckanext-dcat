@@ -266,6 +266,10 @@ class RDFProfile(object):
                     fallback = str(o)
             elif len(list(self.g.objects(o, RDFS.label))):
                 return str(next(self.g.objects(o, RDFS.label)))
+            elif isinstance(o, BNode):
+                text = self._blank_node_text(o)
+                if text:
+                    return text
             else:
                 return str(o)
         return fallback
@@ -372,9 +376,35 @@ class RDFProfile(object):
 
         Both subject and predicate must be rdflib URIRef or BNode  objects
 
+        A blank node gives its text (see `_blank_node_text`), and nothing if it has none:
+        its internal id says nothing to a reader.
+
         If no values found, returns an empty list
         """
-        return [str(o) for o in self.g.objects(subject, predicate)]
+        values = []
+        for o in self.g.objects(subject, predicate):
+            if isinstance(o, BNode):
+                text = self._blank_node_text(o)
+                if text:
+                    values.append(text)
+            else:
+                values.append(str(o))
+        return values
+
+    def _blank_node_text(self, node):
+        """
+        The text a blank node stands for: its label, preferred label, title, notation
+        or description, in that order, in the default language if there is one.
+        Returns an empty string for a node without any of them.
+        """
+        for predicate in (RDFS.label, SKOS.prefLabel, DCT.title, SKOS.notation, DCT.description):
+            literals = [o for o in self.g.objects(node, predicate) if isinstance(o, Literal)]
+            for literal in literals:
+                if literal.language and literal.language == self._default_lang:
+                    return str(literal)
+            if literals:
+                return str(literals[0])
+        return ""
 
     def _object_value_list_multilingual(self, subject, predicate):
         """
