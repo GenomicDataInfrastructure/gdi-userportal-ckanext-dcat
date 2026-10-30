@@ -1,39 +1,105 @@
 ## Mapping between CKAN fields and HealthDCAT-AP
 
-This section defines how CKAN fields map to the [HealthDCAT-AP](http://healthdataportal.eu/ns/health#) extension of DCAT-AP, used to support health-specific metadata needs in CKAN datasets. These mappings are implemented in the `EuropeanHealthDCATAPProfile` class and extend the core DCAT-AP 3.0 logic.
+This page lists how the health-specific CKAN dataset fields map to the
+[HealthDCAT-AP](https://data.health.europa.eu/healthdcat-ap/) properties (namespace
+`healthdcatap:` = `http://healthdataportal.eu/ns/health#`, plus `dpv:`, `dqv:`, `oa:` and, for R8,
+`cv:`, `csvw:`, `time:` and `geodcatap:`). The plain DCAT-AP fields are in [mapping.md](mapping.md).
 
-| DCAT Class     | RDF Property                           | CKAN Dataset Field                  | Stored as | Notes |
-|----------------|----------------------------------------|-------------------------------------|-----------|-------|
-| dcat:Dataset   | healthdcatap:analytics                 | analytics                           | list      | Publishers are encouraged to provide URLs pointing to document repositories where users can access or request associated resources such as technical reports of the dataset, quality measurements, usability indicators,... Note that HealthDCAT-AP mentions also API endpoints or analytics services, but these would not be Distriutions but rather DatasetServices. |
-| dcat:Dataset   | healthdcatap:qualityAnnotation         | quality_annotation                  | list      | This field allows annotations or notes about the quality of the dataset, such as data completeness, known issues, or validation methods. |
-| dcat:Dataset   | healthdcatap:hasCodeValues             | code_values                         | list      | Inside this property, you can provide the coding system of the dataset in the form of wikidata URI (example: https://www.wikidata.org/entity/P494 for ICD-10 ID) and the URI of the value that describes the dataset (example: https://icd.who.int/browse10/2019/en#/Y59.0 for viral vaccines) |
-| dcat:Dataset   | healthdcatap:hasCodingSystem           | coding_system                       | list      | This property provides informatio on which coding systems are in use inside your dataset. For this, wikidata URIs must be used.|
-| dcat:Dataset   | healthdcatap:healthCategory            | health_category                     | list      | Health-specific category values. |
-| dcat:Dataset   | healthdcatap:healthTheme               | health_theme                        | list      | This property is a structured way to tag the dataset with different health themes. This could include, for example, the specific disease the dataset is about. More details can be provided, if desirable, in the keywords property. Current status: the HealthDCAT-AP working group is currently exploring is other sources (ontologies, thesauri) can be used for this, next to Wikidata. To access Wikidata, click on the link in the controlled vocabulary column and search for your desired theme there. |
-| dcat:Dataset   | dpv:hasLegalBasis                      | legal_basis                         | list      | The legal basis can be provided as a value from the dpv taxonomy (see Controlled vocabulary column).
-While the applicable legislation indicates which legislation mandates the publication of the dataset, the legal basis property described the legal basis for initial collection and processing of (personal) data.
-Example value for this property could be: dpv:Consent|
-| dcat:Dataset   | dpv:hasPersonalData                    | personal_data                       | list      | The different types of personal information that are collected in the dataset can be indicated with this property. Values can be picked from the dpv taxonomy (see controlled vocabulary column).
-For example: dpv-pd:Gender |
-| dcat:Dataset   | healthdcatap:populationCoverage        | population_coverage                 | list      | This field is a free text description of the population covered in the dataset. For example, "Adults aged 18–65 diagnosed with type 2 diabetes in the Netherlands between 2015 and 2020". |
-| dcat:Dataset   | healthdcatap:publisherNote             | publisher_note                      | list      | This property can be repeated for parallel language versions of the publisher notes. Example: "Sciensano is a research institute and the national public health institute of Belgium. It is a so-called federal scientific institution that operates under the authority of the federal minister of Public Health and the federal minister of Agriculture of Belgium."|
-| dcat:Dataset   | healthdcatap:publisherType             | publisher_type                      | list      |Current status: Specifically for the health domain, a controlled vocabulary is being developed to include commonly recognised health publishers. This vocabulary is currently under development. Version 1.0 includes the following types: Academia-ScientificOrganisation, Company, IndustryConsortium, LocalAuthority, NationalAuthority, NonGovernmentalOrganisation, NonProfitOrganisation, PrivateIndividual, RegionalAuthority, StandardisationBody and SupraNationalAuthority. These should use the following URL: http://purl.org/adms/publishertype/[type]. |
-| dcat:Dataset   | dpv:hasPurpose                         | purpose                             | list      | One (or many) category or sub-category of the purposes can be chosen from the taxonomy provided by dpv (see controlled vocabulary column).
-Example value could be: dpv:ResearchAndDevelopment. |
-| dcat:Dataset   | healthdcatap:minTypicalAge             | min_typical_age                     | integer   | The approximate minimum age of subjects in the dataset, if applicable. Approximate age is given to protect potentially sensitive information of subjects in the dataset.|
-| dcat:Dataset   | healthdcatap:maxTypicalAge             | max_typical_age                     | integer   | The approximate maximum age of subjects in the dataset, if applicable. Approximate age is given to protect potentially sensitive information of subjects in the dataset. |
-| dcat:Dataset   | healthdcatap:numberOfRecords           | number_of_records                   | integer   | Number of records inside a Dataset. |
-| dcat:Dataset   | healthdcatap:numberOfUniqueIndividuals | number_of_unique_individuals       | integer   | This property is not mandatory, since not all datasets might include data from individuals. |
-| dcat:Dataset   | healthdcatap:hdab                      | hdab                                | agent     | Health Data Access Body responsible. |
-| dcat:Dataset   | healthdcatap:retentionPeriod           | retention_period                    | interval  | This property makes use of the class dct:PeriodOfTime, in which a start and end date should be provided. |
-| dcat:Distribution | healthdcatap:retentionPeriod     | resources[].retention_period     | interval  | Stored per-resource, not as a top-level dataset field: each entry in `resources` carries its own `retention_period`. This property makes use of the class dct:PeriodOfTime, in which a start and end date should be provided. |
+**The CKAN field names are the same in every profile.** A profile decides only how a field is read
+from and written to RDF. Two health profiles exist:
 
-### Notes
+| RDF profile (entry point) | Class | HealthDCAT-AP version | Metadata profile pack |
+|---|---|---|---|
+| `euro_health_dcat_ap` | `EuropeanHealthDCATAPProfile` | The portal's original model. | `gdi_current` |
+| `euro_health_dcat_ap_r8` | `EuropeanHealthDCATAPR8Profile` | HealthDCAT-AP Release 8. | `healthdcat_r8` |
 
-- All `list` values are exported using `rdf:List`, supporting multi-valued entries.
-- `hdab` is parsed as an `foaf:Agent` and may include structured details.
-- `retention_period` expects a nested dictionary like `{ "start": <date>, "end": <date> }`.
-- When language-specific literals are needed (eg `population_coverage`, `publisher_note`, `title`, resource `rights`), enable the Fluent-aware schema `ckanext.dcat.schemas:health_dcat_ap_multilingual.yaml` together with the `fluent` plugin and include `ckanext.fluent:presets.json` in `scheming.presets`. This ensures translated values round-trip when harvesting and serializing HealthDCAT-AP content.
+The R8 profile builds on the first and overrides only where R8 differs, so a row is the same for
+both unless its "R8" column says otherwise. A deployment enables one or both packs and a harvest
+source can pick one; see `docs/metadata-profiles.md` of the
+`gdi-userportal-ckan-docker` repository. The full comparison with R8, property by property, is in
+the [R8 gap analysis](healthdcat-ap-r8-gap-analysis.md).
+
+Repeated values are written as repeated triples, not as an `rdf:List`.
+
+### Dataset fields
+
+| CKAN field | RDF property | Stored as | Both profiles | R8 |
+|---|---|---|---|---|
+| `analytics` | `healthdcatap:analytics` | list of IRIs | Also read as distributions. | Same. |
+| `code_values` | `healthdcatap:hasCodeValues` | list | An IRI when the value starts with `http(s)`, otherwise a literal. | Always a literal: R8's range is literal. |
+| `coding_system` | `healthdcatap:hasCodingSystem` | list | An IRI or a literal. | The node is typed `dct:Standard`; free text goes in a typed node as `dct:title`. |
+| `health_category` | `healthdcatap:healthCategory` | list | An IRI or a literal. | A bare code of the health categories vocabulary is written as its IRI (see below); free text becomes a `skos:Concept` with a `skos:prefLabel`. |
+| `health_theme` | `healthdcatap:healthTheme` | list | An IRI or a literal. | Same treatment as `health_category`. |
+| `legal_basis` | `dpv:hasLegalBasis` | list | An IRI or a literal. | The node is typed `dpv:LegalBasis`. |
+| `personal_data` | `dpv:hasPersonalData` | list | An IRI. | The node is typed `dpv:PersonalData`. |
+| `purpose` | `dpv:hasPurpose` | list | An IRI or a literal. | The node is typed `dpv:Purpose`. |
+| `population_coverage` | `healthdcatap:populationCoverage` | text | Free text; one value per language with the multilingual schema. | Same. |
+| `min_typical_age`, `max_typical_age`, `number_of_records`, `number_of_unique_individuals` | `healthdcatap:minTypicalAge`, `maxTypicalAge`, `numberOfRecords`, `numberOfUniqueIndividuals` | integer | Written as `xsd:nonNegativeInteger`. | Same. |
+| `quality_annotation` | `dqv:hasQualityAnnotation` | list of `body`, `target`, `motivated_by` | An `oa:Annotation` with `oa:hasBody`, `oa:hasTarget`, `oa:motivatedBy`. Parsing keeps an annotation only when its body and target are `http(s)` IRIs. | The node is typed `dqv:QualityCertificate`, the range R8 requires. |
+| `retention_period` | `healthdcatap:retentionPeriod` | list of `start`, `end` | A `dct:PeriodOfTime` with `dcat:startDate` and `dcat:endDate`. A distribution carries its own, as `resources[].retention_period`. | Same. |
+| `hdab` | `healthdcatap:hdab` | list of agents | See agents below. | See agents below. |
+| `trusted_data_holder` | `healthdcatap:trustedDataHolder` | boolean | Read and written. | Not an R8 property: not read, and the R8 pack has no field for it. |
+| `dataset_status` | `adms:status` | choice | Read and written by the `euro_dcat_ap_nl` profile, which is in the `gdi_current` chain. | Not part of the R8 chain, and the R8 pack has no field for it. |
+
+Fields only R8 has (`healthdcat_r8` pack):
+
+| CKAN field | RDF property | Stored as | Notes |
+|---|---|---|---|
+| `alternative_title` | `dct:alternative` | list of text | |
+| `has_structured_data` | `healthdcatap:hasStructuredData` | boolean | Written as `xsd:boolean`. R8 asks for variables when it is true; that is not checked. |
+| `variables` | `healthdcatap:hasVariables` | nested list | A `csvw:TableGroup` (`dct:title`) holding `csvw:Table`s (`dct:title`, `dcat:keyword`, `csvw:url`) holding `csvw:Column`s (`csvw:name`, `csvw:title`, `dct:description`, `csvw:datatype`, `csvw:propertyUrl`). |
+| `custodian` | `geodcatap:custodian` | agent | Same agent shape as `hdab`; the first value is written. |
+| `hdab_coordinator` | `healthdcatap:hdabCoordinator` | agent | Same agent shape as `hdab`; the first value is written. |
+| `related_resource` | `dct:relation` | list | In every profile this is also kept as a free extra by the shared DCAT-AP code; R8 makes it a schema field. |
+| `source` | `dct:source` | list | As `related_resource`, for `dct:source`. |
+| `resources[].access_services[].documentation` | `foaf:page` on the `dcat:DataService` | list of IRIs | |
+
+### Agents
+
+`publisher`, `hdab`, `custodian` and `hdab_coordinator` are agents.
+
+- **`euro_health_dcat_ap`**: a flat `foaf:Agent` with `vcard:hasEmail` and `foaf:homepage`, and the
+  publisher note and type as `healthdcatap:publisherNote` and `healthdcatap:publisherType`.
+- **`euro_health_dcat_ap_r8`**: every health agent has one `cv:ContactPoint` holding the email
+  (`cv:email`), the contact page (`cv:contactPage`), the telephone (`cv:telephone`) and the opening
+  hours (`cv:openingHours`, `cv:specialOpeningHoursSpecification`, as `time:TemporalEntity`). The
+  publisher note is written as `dct:description`. The flat terms of the other profile are still
+  read, for agents that carry them, and are not written. When R8 gives an agent several contact
+  points only the first is read, with a warning.
+
+The subfields R8 adds to the contact point (`telephone`, `opening_hours`, `special_opening_hours`)
+exist in the schema only when `healthdcat_r8` decides the shared agent fields; see the pack order in
+the `profile_packs/README.md` of `ckanext-gdi-userportal`. A parsed value for a subfield the loaded schema lacks is dropped.
+
+### Vocabulary IRIs (R8)
+
+R8 requires concepts from the HealthDCAT-AP vocabularies under
+`https://hdeu-dcat.data.health.europa.eu/resource/authority/`. The R8 profile writes a bare code as
+the IRI in its vocabulary and leaves a value that is already an IRI (a Wikidata or ADMS one, for
+example) as it is. There is no crosswalk from those to the new vocabularies.
+
+| CKAN field | Vocabulary |
+|---|---|
+| `health_category` | `healthcategories` |
+| `health_theme` | `health-theme` |
+| `coding_system` | `coding-system` |
+| `conforms_to` | `standard` |
+| publisher type | `publisher-type` |
+| `was_generated_by` activity type | `health-activity` |
+
+### Values R8 allows several of
+
+R8 allows several values for `identifier`, `dcat_type` and the landing page (`url`). These CKAN
+fields stay single-valued (ADR 0001, Q3): the R8 profile keeps the first value and logs a warning
+when it drops others.
+
+### Language-specific values
+
+For language-specific literals (for example `population_coverage`, `publisher_note`, `title`,
+resource `rights`), use a Fluent-aware schema: the dataset schema generated by the
+`ckanext-gdi-userportal` profile packs, or `ckanext.dcat.schemas:health_dcat_ap_multilingual.yaml`
+together with `ckanext.dcat.schemas:presets.yaml` and the Fluent presets.
 
 !!! Note
-    See [EuropeanHealthDCATAPProfile](https://github.com/ckan/ckanext-dcat/blob/master/ckanext/dcat/profiles/euro_health_dcat_ap.py) for implementation details.
+    See [EuropeanHealthDCATAPProfile](https://github.com/ckan/ckanext-dcat/blob/master/ckanext/dcat/profiles/euro_health_dcat_ap.py)
+    and `euro_health_dcat_ap_r8.py` in the same folder for implementation details.
