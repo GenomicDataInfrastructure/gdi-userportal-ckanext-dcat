@@ -702,3 +702,92 @@ class TestWhatTheSchemaHasNoSubfieldFor:
         (hdab,) = parse(HDAB_TTL)["hdab"]
 
         assert set(CONTACT_POINT) <= set(hdab)
+
+
+HDEU = "https://hdeu-dcat.data.health.europa.eu/resource/authority"
+
+
+class TestVocabularyIris:
+    """R8 wants the health vocabularies under one host; a bare authority code gets its IRI."""
+
+    @pytest.mark.parametrize(
+        "key, predicate, vocabulary, code",
+        [
+            ("health_category", HEALTHDCATAP.healthCategory, "healthcategories", "EHRS"),
+            ("health_theme", HEALTHDCATAP.healthTheme, "health-theme", "HEALTH_SYSTEMS"),
+            ("coding_system", HEALTHDCATAP.hasCodingSystem, "coding-system", "SNOMED-CT"),
+            ("conforms_to", DCT.conformsTo, "standard", "DICOM"),
+        ],
+    )
+    def test_a_bare_code_becomes_the_iri_in_its_vocabulary(self, key, predicate, vocabulary, code):
+        graph = serialize({key: [code]})
+
+        assert values(graph, predicate) == [URIRef(f"{HDEU}/{vocabulary}/{code}")]
+
+    @pytest.mark.parametrize("key, predicate", [("coding_system", HEALTHDCATAP.hasCodingSystem), ("conforms_to", DCT.conformsTo)])
+    def test_an_expanded_standard_is_typed(self, key, predicate):
+        graph = serialize({key: ["DICOM"]})
+
+        (iri,) = values(graph, predicate)
+        assert (iri, RDF.type, DCT.Standard) in graph
+
+    @pytest.mark.parametrize(
+        "key, predicate",
+        [
+            ("health_category", HEALTHDCATAP.healthCategory),
+            ("health_theme", HEALTHDCATAP.healthTheme),
+            ("coding_system", HEALTHDCATAP.hasCodingSystem),
+        ],
+    )
+    def test_an_iri_is_left_alone_whatever_its_host(self, key, predicate):
+        for iri in ("http://www.wikidata.org/entity/Q12136", f"{HDEU}/other/ABC", "http://purl.org/adms/x"):
+            assert URIRef(iri) in values(serialize({key: [iri]}), predicate)
+
+    @pytest.mark.parametrize("text", ["Electronic health records", "ehrs", "EHR records", "Cancer"])
+    def test_a_value_that_is_not_shaped_like_a_code_is_left_alone(self, text):
+        graph = serialize({"health_category": [text]})
+
+        (node,) = values(graph, HEALTHDCATAP.healthCategory)
+        assert not str(node).startswith(HDEU)
+        assert values(graph, SKOS.prefLabel, node) == [Literal(text)]
+
+    @pytest.mark.parametrize("role", ["hdab", "custodian", "hdab_coordinator", "publisher"])
+    def test_a_publisher_type_code_becomes_an_iri_on_every_agent(self, role):
+        predicate = {
+            "hdab": HEALTHDCATAP.hdab,
+            "custodian": GEODCATAP.custodian,
+            "hdab_coordinator": HEALTHDCATAP.hdabCoordinator,
+            "publisher": DCT.publisher,
+        }[role]
+
+        graph = serialize({role: [{"uri": "http://example.org/a", "name": "A", "type": "non-gov-org"}]})
+
+        (agent,) = values(graph, predicate)
+        assert values(graph, DCT.type, agent) == [URIRef(f"{HDEU}/publisher-type/non-gov-org")]
+
+    def test_a_publisher_type_iri_is_left_alone(self):
+        iri = "http://purl.org/adms/publishertype/NonProfitOrganisation"
+
+        graph = serialize({"hdab": [{"uri": "http://example.org/a", "name": "A", "type": iri}]})
+
+        (agent,) = values(graph, HEALTHDCATAP.hdab)
+        assert values(graph, DCT.type, agent) == [URIRef(iri)]
+
+    def test_a_health_activity_type_code_becomes_an_iri(self):
+        graph = serialize({"was_generated_by": [{"uri": "http://example.org/act", "dct_type": "ROUTINE_RECORDS"}]})
+
+        assert values(graph, DCT.type, URIRef("http://example.org/act")) == [
+            URIRef(f"{HDEU}/health-activity/ROUTINE_RECORDS")
+        ]
+
+    def test_a_health_activity_type_iri_is_left_alone(self):
+        iri = f"{HDEU}/health-activity/ROUTINE_RECORDS"
+
+        graph = serialize({"was_generated_by": [{"uri": "http://example.org/act", "dct_type": iri}]})
+
+        assert values(graph, DCT.type, URIRef("http://example.org/act")) == [URIRef(iri)]
+
+    def test_the_health_dcat_ap_profile_does_not_expand_codes(self):
+        graph = serialize({"health_category": ["EHRS"]}, EuropeanHealthDCATAPProfile)
+
+        assert values(graph, HEALTHDCATAP.healthCategory) == [Literal("EHRS")]

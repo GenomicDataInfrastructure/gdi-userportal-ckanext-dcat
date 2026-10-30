@@ -1,7 +1,8 @@
 import json
 import logging
+import re
 
-from rdflib import DCAT, FOAF, RDF, RDFS, XSD, BNode, Literal, URIRef
+from rdflib import DCAT, FOAF, PROV, RDF, RDFS, XSD, BNode, Literal, URIRef
 from rdflib.namespace import DCTERMS as DCT
 from rdflib.namespace import SKOS, Namespace
 
@@ -61,12 +62,30 @@ LEGACY_AGENT_PREDICATES = (
 TYPED_OBJECTS = (
     # predicate, class, property for free text, type an IRI
     (HEALTHDCATAP.hasCodingSystem, DCT.Standard, DCT.title, True),
+    (DCT.conformsTo, DCT.Standard, DCT.title, True),
     (HEALTHDCATAP.healthCategory, SKOS.Concept, SKOS.prefLabel, False),
     (HEALTHDCATAP.healthTheme, SKOS.Concept, SKOS.prefLabel, False),
     (DPV.hasLegalBasis, DPV.LegalBasis, DCT.description, True),
     (DPV.hasPersonalData, DPV.PersonalData, DCT.description, True),
     (DPV.hasPurpose, DPV.Purpose, DCT.description, True),
 )
+
+# The controlled vocabularies R8 requires (gap analysis section 4), all under one host.
+# A bare authority code of such a vocabulary is written as its IRI; a value that is already
+# an IRI (Wikidata and ADMS ones included) or is not shaped like a code is left alone.
+HDEU_AUTHORITY = "https://hdeu-dcat.data.health.europa.eu/resource/authority"
+UPPERCASE_CODE = re.compile(r"^[A-Z0-9][A-Z0-9_.\-]*$")
+LOWERCASE_CODE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+VOCABULARIES = {
+    "healthcategories": (UPPERCASE_CODE, [HEALTHDCATAP.healthCategory]),
+    "health-theme": (UPPERCASE_CODE, [HEALTHDCATAP.healthTheme]),
+    "coding-system": (UPPERCASE_CODE, [HEALTHDCATAP.hasCodingSystem]),
+    "standard": (UPPERCASE_CODE, [DCT.conformsTo]),
+}
+# Agents (publisher type), and the activity behind prov:wasGeneratedBy (health activity type)
+PUBLISHER_TYPE = ("publisher-type", LOWERCASE_CODE)
+HEALTH_ACTIVITY_TYPE = ("health-activity", UPPERCASE_CODE)
+AGENT_PREDICATES = (DCT.publisher, DCT.creator, HEALTHDCATAP.hdab, GEODCATAP.custodian, HEALTHDCATAP.hdabCoordinator)
 
 # R8 allows several values where the CKAN field holds one. The field stays single-valued
 # (ADR 0001, Q3): the first value is kept and the others are dropped, with a warning.
@@ -148,6 +167,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
                 )
             )
 
+        self._expand_vocabulary_codes(dataset_ref)
         self._type_the_objects(dataset_ref)
         self._write_code_values_as_literals(dataset_ref)
         self._write_quality_annotations_as_certificates(dataset_ref)
@@ -165,6 +185,27 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
                 predicate,
                 field,
             )
+
+    def _expand_vocabulary_codes(self, dataset_ref):
+        for vocabulary, (code, predicates) in VOCABULARIES.items():
+            for predicate in predicates:
+                self._expand_codes(dataset_ref, predicate, vocabulary, code)
+
+        vocabulary, code = PUBLISHER_TYPE
+        for predicate in AGENT_PREDICATES:
+            for agent_ref in list(self.g.objects(dataset_ref, predicate)):
+                self._expand_codes(agent_ref, DCT.type, vocabulary, code)
+
+        vocabulary, code = HEALTH_ACTIVITY_TYPE
+        for activity_ref in list(self.g.objects(dataset_ref, PROV.wasGeneratedBy)):
+            self._expand_codes(activity_ref, DCT.type, vocabulary, code)
+
+    def _expand_codes(self, subject, predicate, vocabulary, code):
+        for value in list(self.g.objects(subject, predicate)):
+            # A bare code is a literal, or a relative IRI where the serializer wraps it in URIRef
+            if isinstance(value, (Literal, URIRef)) and code.match(str(value)):
+                self.g.remove((subject, predicate, value))
+                self.g.add((subject, predicate, URIRef(f"{HDEU_AUTHORITY}/{vocabulary}/{value}")))
 
     def _type_the_objects(self, dataset_ref):
         for predicate, rdf_class, text_predicate, type_iris in TYPED_OBJECTS:
