@@ -5,6 +5,7 @@ Pure tests: no CKAN database, no scheming plugin. The dataset schema is a small 
 defined here and handed to the profile through ``base.get_action``, like the other
 health profile tests do.
 """
+import json
 import logging
 from unittest import mock
 
@@ -25,11 +26,29 @@ DQV = Namespace("http://www.w3.org/ns/dqv#")
 OA = Namespace("http://www.w3.org/ns/oa#")
 HEALTHDCATAP = Namespace("http://healthdataportal.eu/ns/health#")
 
+CV = Namespace("http://data.europa.eu/m8g/")
+TIME = Namespace("http://www.w3.org/2006/time#")
+CSVW = Namespace("http://www.w3.org/ns/csvw#")
+FOAF = Namespace("http://xmlns.com/foaf/0.1/")
+VCARD = Namespace("http://www.w3.org/2006/vcard/ns#")
+GEODCATAP = Namespace("http://data.europa.eu/930/")
+RDFS = Namespace("http://www.w3.org/2000/01/rdf-schema#")
+
 DATASET = URIRef("http://example.org/dataset")
 
 
 def _field(name, **extra):
     return {"field_name": name, "label": name, **extra}
+
+
+def _agent_subfields(*extra):
+    return [
+        _field(n)
+        for n in ("uri", "name", "name_translated", "email", "url", "type", "publisher_note", *extra)
+    ]
+
+
+CONTACT_POINT = ("telephone", "opening_hours", "special_opening_hours")
 
 
 SCHEMA = {
@@ -47,8 +66,15 @@ SCHEMA = {
         _field("legal_basis", preset="multiple_text", validators="ignore_missing scheming_multiple_text"),
         _field("personal_data", preset="multiple_text", validators="ignore_missing scheming_multiple_text"),
         _field("purpose", preset="multiple_text", validators="ignore_missing scheming_multiple_text"),
+        _field("publisher", repeating_subfields=_agent_subfields(*CONTACT_POINT)),
+        _field("hdab", repeating_subfields=_agent_subfields(*CONTACT_POINT)),
+        _field("custodian", repeating_subfields=_agent_subfields(*CONTACT_POINT)),
+        _field("hdab_coordinator", repeating_subfields=_agent_subfields(*CONTACT_POINT)),
+        _field("variables", repeating_subfields=[_field("title_translated"), _field("tables")]),
     ],
-    "resource_fields": [],
+    "resource_fields": [
+        _field("access_services", repeating_subfields=[_field("title"), _field("documentation")]),
+    ],
 }
 
 
@@ -246,3 +272,408 @@ class TestSingleValuedFields:
             parse(PREFIXES + '<http://example.org/dataset> a dcat:Dataset ; dct:identifier "a" ; dct:type <http://example.org/t1> .')
 
         assert not caplog.records
+
+
+AGENT_PREFIXES = PREFIXES + """
+@prefix cv: <http://data.europa.eu/m8g/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix geodcatap: <http://data.europa.eu/930/> .
+@prefix time: <http://www.w3.org/2006/time#> .
+"""
+
+HDAB_TTL = AGENT_PREFIXES + """
+<http://example.org/dataset> a dcat:Dataset ;
+    healthdcatap:hdab <http://example.org/hdab> ;
+    healthdcatap:hdabCoordinator <http://example.org/coordinator> ;
+    geodcatap:custodian <http://example.org/custodian> .
+
+<http://example.org/hdab> a foaf:Agent ;
+    foaf:name "Belgian HDAB"@en ;
+    cv:contactPoint [
+        a cv:ContactPoint ;
+        cv:email "hdab@example.org" ;
+        cv:contactPage <https://example.org/contact> ;
+        cv:telephone "+32 2 555 0102" ;
+        cv:openingHours [ a time:TemporalEntity ; dct:description "Weekdays 08:30-16:30"@en ;
+                          cv:frequency <http://publications.europa.eu/resource/authority/frequency/DAILY> ] ;
+        cv:specialOpeningHoursSpecification [ a time:TemporalEntity ; dct:description "Closed on holidays"@en ]
+    ] .
+
+<http://example.org/coordinator> a foaf:Agent ; foaf:name "Coordinator" ;
+    cv:contactPoint [ a cv:ContactPoint ; cv:email "coordinator@example.org" ] .
+<http://example.org/custodian> a foaf:Agent ; foaf:name "Custodian" ;
+    cv:contactPoint [ a cv:ContactPoint ; cv:contactPage <https://example.org/custodian> ] .
+"""
+
+
+class TestHealthAgents:
+    def test_the_contact_point_is_read_into_the_flat_subfields(self):
+        (hdab,) = parse(HDAB_TTL)["hdab"]
+
+        assert hdab["email"] == "hdab@example.org"
+        assert hdab["url"] == "https://example.org/contact"
+        assert hdab["telephone"] == "+32 2 555 0102"
+        assert hdab["opening_hours"] == [
+            {
+                "description_translated": {"en": "Weekdays 08:30-16:30"},
+                "frequency": "http://publications.europa.eu/resource/authority/frequency/DAILY",
+            }
+        ]
+        assert hdab["special_opening_hours"] == [{"description_translated": {"en": "Closed on holidays"}}]
+
+    def test_the_custodian_and_the_coordinator_are_parsed(self):
+        dataset = parse(HDAB_TTL)
+
+        assert dataset["hdab_coordinator"][0]["email"] == "coordinator@example.org"
+        assert dataset["custodian"][0]["url"] == "https://example.org/custodian"
+        assert dataset["custodian"][0]["name"] == "Custodian"
+
+    def test_an_agent_without_a_contact_point_keeps_what_the_base_parse_gives(self):
+        dataset = parse(
+            AGENT_PREFIXES + '<http://example.org/dataset> a dcat:Dataset ; healthdcatap:hdab <http://example.org/a> . '
+            '<http://example.org/a> a foaf:Agent ; foaf:name "A" ; foaf:mbox <mailto:a@example.org> .'
+        )
+
+        (hdab,) = dataset["hdab"]
+        assert hdab["email"] == "a@example.org"
+        assert "telephone" not in hdab
+
+    def test_several_contact_points_give_a_warning_and_the_first_is_read(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            dataset = parse(
+                AGENT_PREFIXES
+                + '<http://example.org/dataset> a dcat:Dataset ; healthdcatap:hdab <http://example.org/a> . '
+                '<http://example.org/a> a foaf:Agent ; foaf:name "A" ; cv:contactPoint [ cv:email "a@example.org" ] , [ cv:email "b@example.org" ] .'
+            )
+
+        assert dataset["hdab"][0]["email"] in ("a@example.org", "b@example.org")
+        assert any("cv:contactPoint" in r.getMessage() for r in caplog.records)
+
+    AGENT = {
+        "uri": "http://example.org/hdab",
+        "name": "Belgian HDAB",
+        "name_translated": {"en": "Belgian HDAB"},
+        "email": "hdab@example.org",
+        "url": "https://example.org/contact",
+        "telephone": "+32 2 555 0102",
+        "opening_hours": [
+            {
+                "description_translated": {"en": "Weekdays 08:30-16:30"},
+                "frequency": "http://publications.europa.eu/resource/authority/frequency/DAILY",
+            }
+        ],
+        "special_opening_hours": [{"description_translated": {"en": "Closed on holidays"}}],
+    }
+
+    def test_each_health_agent_gets_exactly_one_contact_point(self):
+        graph = serialize(
+            {
+                "hdab": [self.AGENT],
+                "custodian": [{**self.AGENT, "uri": "http://example.org/custodian"}],
+                "hdab_coordinator": [{**self.AGENT, "uri": "http://example.org/coordinator"}],
+            }
+        )
+
+        for predicate in (HEALTHDCATAP.hdab, GEODCATAP.custodian, HEALTHDCATAP.hdabCoordinator):
+            (agent,) = values(graph, predicate)
+            (contact_point,) = values(graph, CV.contactPoint, agent)
+            assert (contact_point, RDF.type, CV.ContactPoint) in graph
+
+    def test_an_agent_in_two_roles_still_has_one_contact_point(self):
+        graph = serialize({"hdab": [self.AGENT], "custodian": [self.AGENT]})
+
+        (agent,) = values(graph, HEALTHDCATAP.hdab)
+        assert values(graph, GEODCATAP.custodian) == [agent]
+        assert len(values(graph, CV.contactPoint, agent)) == 1
+
+    def test_the_contact_point_holds_the_email_the_page_and_the_telephone(self):
+        graph = serialize({"hdab": [self.AGENT]})
+
+        (agent,) = values(graph, HEALTHDCATAP.hdab)
+        (contact_point,) = values(graph, CV.contactPoint, agent)
+        assert values(graph, CV.email, contact_point) == [Literal("hdab@example.org")]
+        assert values(graph, CV.contactPage, contact_point) == [URIRef("https://example.org/contact")]
+        assert values(graph, CV.telephone, contact_point) == [Literal("+32 2 555 0102")]
+
+    def test_the_flat_vcard_and_foaf_terms_are_not_written(self):
+        graph = serialize({"hdab": [self.AGENT]})
+
+        (agent,) = values(graph, HEALTHDCATAP.hdab)
+        assert values(graph, VCARD.hasEmail, agent) == []
+        assert values(graph, FOAF.homepage, agent) == []
+
+    def test_the_agent_keeps_its_name(self):
+        graph = serialize({"hdab": [self.AGENT]})
+
+        (agent,) = values(graph, HEALTHDCATAP.hdab)
+        assert values(graph, FOAF.name, agent) == [Literal("Belgian HDAB", lang="en")]
+
+    def test_the_health_dcat_ap_profile_still_writes_the_flat_terms(self):
+        graph = serialize({"hdab": [self.AGENT]}, EuropeanHealthDCATAPProfile)
+
+        (agent,) = values(graph, HEALTHDCATAP.hdab)
+        assert values(graph, VCARD.hasEmail, agent)
+        assert values(graph, CV.contactPoint, agent) == []
+
+    def test_an_agent_without_contact_data_gets_no_contact_point(self):
+        graph = serialize({"hdab": [{"uri": "http://example.org/hdab", "name": "Belgian HDAB"}]})
+
+        (agent,) = values(graph, HEALTHDCATAP.hdab)
+        assert values(graph, CV.contactPoint, agent) == []
+
+    def test_an_agent_without_a_uri_gets_a_blank_node_with_its_contact_point(self):
+        graph = serialize({"hdab": [{"name": "Anonymous", "email": "x@example.org"}]})
+
+        (agent,) = values(graph, HEALTHDCATAP.hdab)
+        assert values(graph, CV.contactPoint, agent)
+
+    def test_the_opening_hours_are_temporal_entities(self):
+        graph = serialize({"hdab": [self.AGENT]})
+
+        (agent,) = values(graph, HEALTHDCATAP.hdab)
+        (contact_point,) = values(graph, CV.contactPoint, agent)
+        (hours,) = values(graph, CV.openingHours, contact_point)
+        (special,) = values(graph, CV.specialOpeningHoursSpecification, contact_point)
+        assert (hours, RDF.type, TIME.TemporalEntity) in graph
+        assert values(graph, DCT.description, hours) == [Literal("Weekdays 08:30-16:30", lang="en")]
+        frequency = URIRef("http://publications.europa.eu/resource/authority/frequency/DAILY")
+        assert values(graph, CV.frequency, hours) == [frequency]
+        assert (frequency, RDF.type, DCT.Frequency) in graph
+        assert values(graph, DCT.description, special) == [Literal("Closed on holidays", lang="en")]
+
+    def test_the_parse_of_the_serialization_gives_the_agent_back(self):
+        graph = serialize({"hdab": [self.AGENT]})
+
+        (parsed,) = _profile(graph).parse_dataset({"extras": []}, DATASET)["hdab"]
+
+        for key in ("email", "url", "telephone", "opening_hours", "special_opening_hours", "name"):
+            assert parsed[key] == self.AGENT[key], key
+
+
+class TestPublisherNote:
+    def test_the_note_is_written_on_dct_description_for_every_language(self):
+        graph = serialize(
+            {"publisher": [{"uri": "http://example.org/p", "name": "P", "email": "p@example.org",
+                            "publisher_note": {"en": "Maintained quarterly", "nl": "Elk kwartaal"}}]}
+        )
+
+        (publisher,) = values(graph, DCT.publisher)
+        assert values(graph, DCT.description, publisher) == [
+            Literal("Elk kwartaal", lang="nl"),
+            Literal("Maintained quarterly", lang="en"),
+        ] or sorted(values(graph, DCT.description, publisher), key=str) == sorted(
+            [Literal("Maintained quarterly", lang="en"), Literal("Elk kwartaal", lang="nl")], key=str
+        )
+        assert values(graph, HEALTHDCATAP.publisherNote, publisher) == []
+
+    def test_the_health_dcat_ap_profile_writes_the_legacy_predicate(self):
+        graph = serialize(
+            {"publisher": [{"uri": "http://example.org/p", "name": "P", "publisher_note": {"en": "Note"}}]},
+            EuropeanHealthDCATAPProfile,
+        )
+
+        (publisher,) = values(graph, DCT.publisher)
+        assert values(graph, HEALTHDCATAP.publisherNote, publisher) == [Literal("Note", lang="en")]
+
+    def test_dct_description_is_read_as_the_note(self):
+        graph = Graph().parse(
+            data=AGENT_PREFIXES + '<http://example.org/dataset> dct:publisher <http://example.org/p> . '
+            '<http://example.org/p> a foaf:Agent ; foaf:name "P" ; dct:description "Maintained quarterly"@en .',
+            format="turtle",
+        )
+
+        (publisher,) = _profile(graph)._agents_details(DATASET, DCT.publisher)
+
+        assert publisher["publisher_note"]["en"] == "Maintained quarterly"
+
+    def test_only_the_publisher_reads_dct_description_as_a_note(self):
+        graph = Graph().parse(
+            data=AGENT_PREFIXES + '<http://example.org/dataset> healthdcatap:hdab <http://example.org/p> . '
+            '<http://example.org/p> a foaf:Agent ; foaf:name "P" ; dct:description "Not a note"@en .',
+            format="turtle",
+        )
+
+        (hdab,) = _profile(graph)._agents_details(DATASET, HEALTHDCATAP.hdab)
+
+        assert "publisher_note" not in hdab or not any(hdab["publisher_note"].values())
+
+
+VARIABLES_TTL = AGENT_PREFIXES + """
+@prefix csvw: <http://www.w3.org/ns/csvw#> .
+<http://example.org/dataset> a dcat:Dataset ; healthdcatap:hasVariables <http://example.org/vars> .
+<http://example.org/vars> a csvw:TableGroup ; dct:title "Variables"@en ; csvw:table <http://example.org/table> .
+<http://example.org/table> a csvw:Table ; dct:title "Inventory"@en ; dcat:keyword "oncology"@en , "csvw"@en ;
+    csvw:url <https://example.org/variables.csv> ; csvw:column <http://example.org/c1> , <http://example.org/c2> .
+<http://example.org/c1> a csvw:Column ; csvw:name "patientId" ; csvw:title "Patient identifier"@en ;
+    csvw:datatype "string" ; dct:description "Pseudonymised identifier"@en ; csvw:propertyUrl <http://purl.org/dc/terms/identifier> .
+<http://example.org/c2> a csvw:Column ; csvw:name "alive" ; csvw:title "Alive"@en ; csvw:datatype "boolean" ;
+    dct:description "Vital status"@en .
+"""
+
+
+class TestVariables:
+    def test_the_table_group_is_parsed_with_its_tables_and_columns(self):
+        (group,) = parse(VARIABLES_TTL)["variables"]
+
+        assert group["title_translated"] == {"en": "Variables"}
+        (table,) = group["tables"]
+        assert table["title_translated"] == {"en": "Inventory"}
+        assert table["keyword"] == ["csvw", "oncology"]
+        assert table["url"] == "https://example.org/variables.csv"
+        first, second = table["columns"]
+        assert first["name"] == "alive" and second["name"] == "patientId"
+        assert second["title_translated"] == {"en": "Patient identifier"}
+        assert second["description_translated"] == {"en": "Pseudonymised identifier"}
+        assert second["datatype"] == "string"
+        assert second["property_url"] == "http://purl.org/dc/terms/identifier"
+        assert "property_url" not in first
+
+    def test_a_dataset_without_variables_has_no_field(self):
+        assert "variables" not in parse(PREFIXES + "<http://example.org/dataset> a dcat:Dataset .")
+
+    def test_the_serialization_is_a_csvw_table_group(self):
+        graph = serialize({"variables": parse(VARIABLES_TTL)["variables"]})
+
+        (group,) = values(graph, HEALTHDCATAP.hasVariables)
+        assert (group, RDF.type, CSVW.TableGroup) in graph
+        assert values(graph, DCT.title, group) == [Literal("Variables", lang="en")]
+        (table,) = values(graph, CSVW.table, group)
+        assert (table, RDF.type, CSVW.Table) in graph
+        assert values(graph, CSVW.url, table) == [URIRef("https://example.org/variables.csv")]
+        columns = values(graph, CSVW.column, table)
+        assert len(columns) == 2 and all((c, RDF.type, CSVW.Column) in graph for c in columns)
+        patient = next(c for c in columns if Literal("patientId") in graph.objects(c, CSVW.name))
+        assert values(graph, CSVW.title, patient) == [Literal("Patient identifier", lang="en")]
+        assert values(graph, DCT.description, patient) == [Literal("Pseudonymised identifier", lang="en")]
+        assert values(graph, CSVW.propertyUrl, patient) == [URIRef("http://purl.org/dc/terms/identifier")]
+
+    def test_the_parse_of_the_serialization_gives_the_variables_back(self):
+        variables = parse(VARIABLES_TTL)["variables"]
+
+        graph = serialize({"variables": variables})
+
+        assert _profile(graph).parse_dataset({"extras": []}, DATASET)["variables"] == variables
+
+    def test_variables_may_be_a_json_string(self):
+        graph = serialize({"variables": '[{"title_translated": {"en": "V"}, "tables": []}]'})
+
+        (group,) = values(graph, HEALTHDCATAP.hasVariables)
+        assert values(graph, DCT.title, group) == [Literal("V", lang="en")]
+
+
+class TestDistributionsAndDataServices:
+    SERVICE = {
+        "uri": "http://example.org/service",
+        "title": "Access service",
+        "documentation": ["https://example.org/docs"],
+        "access_rights": "http://publications.europa.eu/resource/authority/access-right/RESTRICTED",
+    }
+
+    def _distribution(self, **extra):
+        return {
+            "resources": [
+                {"id": "r1", "uri": "http://example.org/dist", "url": "http://example.org/file", **extra}
+            ]
+        }
+
+    def test_the_data_service_documentation_is_written_as_foaf_page(self):
+        graph = serialize(self._distribution(access_services=[self.SERVICE]))
+
+        assert values(graph, FOAF.page, URIRef("http://example.org/service")) == [URIRef("https://example.org/docs")]
+
+    def test_the_documentation_is_written_for_a_service_without_a_uri(self):
+        service = {"title": "Anonymous", "documentation": ["https://example.org/docs"]}
+
+        graph = serialize(self._distribution(access_services=[service]))
+
+        (node,) = values(graph, DCAT.accessService, URIRef("http://example.org/dist"))
+        assert values(graph, FOAF.page, node) == [URIRef("https://example.org/docs")]
+
+    def test_the_access_rights_iri_of_a_data_service_is_a_rights_statement(self):
+        graph = serialize(self._distribution(access_services=[self.SERVICE]))
+
+        assert (
+            URIRef("http://publications.europa.eu/resource/authority/access-right/RESTRICTED"),
+            RDF.type,
+            DCT.RightsStatement,
+        ) in graph
+
+    def test_free_text_access_rights_become_a_labelled_rights_statement_node(self):
+        service = {**self.SERVICE, "access_rights": "Only for approved researchers"}
+
+        graph = serialize(self._distribution(access_services=[service]))
+
+        (statement,) = values(graph, DCT.accessRights, URIRef("http://example.org/service"))
+        assert (statement, RDF.type, DCT.RightsStatement) in graph
+        assert values(graph, RDFS.label, statement) == [Literal("Only for approved researchers")]
+
+    def test_a_plain_format_becomes_a_labelled_node(self):
+        graph = serialize(self._distribution(format="CSV", mimetype="text/csv"))
+
+        (fmt,) = values(graph, DCT["format"], URIRef("http://example.org/dist"))
+        (media_type,) = values(graph, DCAT.mediaType, URIRef("http://example.org/dist"))
+        assert (fmt, RDF.type, DCT.MediaTypeOrExtent) in graph
+        assert values(graph, RDFS.label, fmt) == [Literal("CSV")]
+        assert (media_type, RDF.type, DCT.MediaType) in graph
+        assert values(graph, RDFS.label, media_type) == [Literal("text/csv")]
+
+    def test_a_format_iri_stays_an_iri(self):
+        iri = "http://publications.europa.eu/resource/authority/file-type/CSV"
+
+        graph = serialize(self._distribution(format=iri))
+
+        assert values(graph, DCT["format"], URIRef("http://example.org/dist")) == [URIRef(iri)]
+
+    def test_the_health_dcat_ap_profile_still_writes_a_plain_format(self):
+        graph = serialize(self._distribution(format="CSV"), EuropeanHealthDCATAPProfile)
+
+        assert values(graph, DCT["format"], URIRef("http://example.org/dist")) == [Literal("CSV")]
+
+    def test_the_documentation_of_a_data_service_is_parsed(self):
+        ttl = AGENT_PREFIXES + """
+        <http://example.org/dataset> a dcat:Dataset ; dcat:distribution <http://example.org/dist> .
+        <http://example.org/dist> a dcat:Distribution ; dcat:accessURL <http://example.org/file> ;
+            dcat:accessService <http://example.org/service> .
+        <http://example.org/service> a dcat:DataService ; dct:title "Service" ;
+            foaf:page <https://example.org/docs> ; dcat:endpointURL <http://example.org/endpoint> .
+        """
+
+        (resource,) = parse(ttl)["resources"]
+
+        (service,) = json.loads(resource["access_services"]) if isinstance(resource["access_services"], str) else resource["access_services"]
+        assert service["documentation"] == ["https://example.org/docs"]
+
+    def test_several_access_urls_give_a_warning(self, caplog):
+        ttl = AGENT_PREFIXES + """
+        <http://example.org/dataset> a dcat:Dataset ; dcat:distribution <http://example.org/dist> .
+        <http://example.org/dist> a dcat:Distribution ; dcat:accessURL <http://example.org/f1> , <http://example.org/f2> .
+        """
+
+        with caplog.at_level(logging.WARNING):
+            parse(ttl)
+
+        assert any("resources.access_url" in r.getMessage() for r in caplog.records)
+
+
+class TestWhatTheSchemaHasNoSubfieldFor:
+    """With gdi_current listed first its narrower agent and data service fields win."""
+
+    def test_the_contact_point_subfields_are_dropped_when_the_schema_lacks_them(self):
+        narrow = {
+            **SCHEMA,
+            "dataset_fields": [
+                _field("hdab", repeating_subfields=_agent_subfields()) if f["field_name"] == "hdab" else f
+                for f in SCHEMA["dataset_fields"]
+            ],
+        }
+        graph = Graph().parse(data=HDAB_TTL, format="turtle")
+        with mock.patch.object(base, "get_action", lambda name: lambda ctx, data: narrow):
+            (hdab,) = EuropeanHealthDCATAPR8Profile(graph).parse_dataset({"extras": []}, DATASET)["hdab"]
+
+        assert hdab["email"] == "hdab@example.org"
+        assert not set(CONTACT_POINT) & set(hdab)
+
+    def test_the_subfields_are_kept_when_the_schema_has_them(self):
+        (hdab,) = parse(HDAB_TTL)["hdab"]
+
+        assert set(CONTACT_POINT) <= set(hdab)
