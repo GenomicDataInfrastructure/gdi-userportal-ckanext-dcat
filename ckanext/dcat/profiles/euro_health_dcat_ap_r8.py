@@ -18,8 +18,11 @@ from ckanext.dcat.profiles.euro_health_dcat_ap import (
 
 log = logging.getLogger(__name__)
 
+IRI_SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
+
 # Core Vocabularies (the CPSV-AP contact point R8 requires on every health agent)
 CV = Namespace("http://data.europa.eu/m8g/")
+ODRL = Namespace("http://www.w3.org/ns/odrl/2/")
 TIME = Namespace("http://www.w3.org/2006/time#")
 CSVW = Namespace("http://www.w3.org/ns/csvw#")
 GEODCATAP = Namespace("http://data.europa.eu/930/")
@@ -137,6 +140,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
         self._warn_about_dropped_values_of_distributions(dataset_ref)
 
         self._parse_access_service_documentation(dataset_dict)
+        self._parse_has_policy(dataset_dict, dataset_ref)
         self._make_contact_urls_single(dataset_dict)
         self._drop_what_the_schema_has_no_subfield_for(dataset_dict)
 
@@ -147,6 +151,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
 
         for prefix, namespace in namespaces.items():
             self.g.bind(prefix, namespace)
+        self.g.bind("odrl", ODRL)
 
         for key, predicate in R8_AGENTS:
             self._add_agents(dataset_ref, dataset_dict, key, predicate, first_only=True)
@@ -454,8 +459,42 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
             if found and is_json:
                 resource_dict["access_services"] = json.dumps(services)
 
+    # --- the policy of a distribution ----------------------------------------------------
+
+    def _parse_has_policy(self, dataset_dict, dataset_ref):
+        """``odrl:hasPolicy`` (0..1) of a distribution, kept as the IRI of the policy.
+
+        The policy itself (its permissions and prohibitions) is not modelled; a policy that is a
+        blank node has no IRI to keep, so it is dropped with a warning.
+        """
+        for distribution_ref in self._distributions(dataset_ref):
+            policies = list(self.g.objects(distribution_ref, ODRL.hasPolicy))
+            iris = sorted(str(policy) for policy in policies if isinstance(policy, URIRef))
+            if len(iris) < len(policies):
+                log.warning(
+                    "%s has an odrl:hasPolicy that is a blank node; only a policy with an IRI is kept",
+                    distribution_ref,
+                )
+            if len(iris) > 1:
+                log.warning(
+                    "%s has %d odrl:hasPolicy values but R8 allows one; only the first is kept",
+                    distribution_ref,
+                    len(iris),
+                )
+            if not iris:
+                continue
+            for resource_dict in dataset_dict.get("resources", []):
+                if resource_dict.get("distribution_ref") == str(distribution_ref):
+                    resource_dict["has_policy"] = iris[0]
+
     def _graph_from_resource(self, resource_dict):
         distribution_ref = CleanedURIRef(resource_uri(resource_dict))
+        policy = self._first_value(resource_dict.get("has_policy"))
+        if policy:
+            if IRI_SCHEME.match(policy):
+                self.g.add((distribution_ref, ODRL.hasPolicy, CleanedURIRef(policy)))
+            else:
+                log.warning("has_policy %r of %s is not an IRI; it is not written", policy, distribution_ref)
         self._write_literals_as_nodes(distribution_ref, DCT["format"], DCT.MediaTypeOrExtent)
         self._write_literals_as_nodes(distribution_ref, DCAT.mediaType, DCT.MediaType)
 

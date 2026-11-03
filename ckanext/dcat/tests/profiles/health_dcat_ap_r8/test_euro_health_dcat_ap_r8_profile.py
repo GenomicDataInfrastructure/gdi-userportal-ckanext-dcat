@@ -34,6 +34,7 @@ FOAF = Namespace("http://xmlns.com/foaf/0.1/")
 VCARD = Namespace("http://www.w3.org/2006/vcard/ns#")
 GEODCATAP = Namespace("http://data.europa.eu/930/")
 RDFS = Namespace("http://www.w3.org/2000/01/rdf-schema#")
+ODRL = Namespace("http://www.w3.org/ns/odrl/2/")
 
 DATASET = URIRef("http://example.org/dataset")
 
@@ -870,3 +871,83 @@ class TestContactPage:
         )
 
         assert len(contact_urls(graph)) == 2
+
+
+POLICY_TTL = PREFIXES + """
+@prefix odrl: <http://www.w3.org/ns/odrl/2/> .
+<http://example.org/dataset> a dcat:Dataset ; dcat:distribution <http://example.org/dist> .
+<http://example.org/dist> a dcat:Distribution ;
+    dcat:accessURL <http://example.org/access> ;
+    %s .
+"""
+DIST = URIRef("http://example.org/dist")
+
+
+def policies(graph):
+    return values(graph, ODRL.hasPolicy, DIST)
+
+
+class TestDistributionPolicy:
+    """odrl:hasPolicy (0..1) of a Distribution, kept as the IRI of the policy."""
+
+    def test_the_policy_iri_is_parsed_into_has_policy(self):
+        (resource,) = parse(POLICY_TTL % "odrl:hasPolicy <http://example.org/policy>")["resources"]
+
+        assert resource["has_policy"] == "http://example.org/policy"
+
+    def test_a_distribution_without_a_policy_has_no_field(self):
+        (resource,) = parse(POLICY_TTL % "dct:title \"d\"")["resources"]
+
+        assert "has_policy" not in resource
+
+    def test_a_blank_node_policy_is_dropped_with_a_warning(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            (resource,) = parse(POLICY_TTL % "odrl:hasPolicy [ a odrl:Policy ]")["resources"]
+
+        assert "has_policy" not in resource
+        assert any("blank node" in record.getMessage() for record in caplog.records)
+
+    def test_several_policies_give_a_warning_and_the_first_iri(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            (resource,) = parse(
+                POLICY_TTL % "odrl:hasPolicy <http://example.org/policy-b>, <http://example.org/policy-a>"
+            )["resources"]
+
+        assert resource["has_policy"] == "http://example.org/policy-a"
+        assert any("only the first is kept" in record.getMessage() for record in caplog.records)
+
+    def test_the_policy_is_serialized_as_an_iri(self):
+        graph = serialize({"resources": [{"id": "r1", "uri": str(DIST), "has_policy": "http://example.org/policy"}]})
+
+        assert policies(graph) == [URIRef("http://example.org/policy")]
+        assert {prefix: str(namespace) for prefix, namespace in graph.namespaces()}["odrl"] == str(ODRL)
+
+    def test_a_value_that_is_not_an_iri_is_not_serialized(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            graph = serialize({"resources": [{"id": "r1", "uri": str(DIST), "has_policy": "free text"}]})
+
+        assert policies(graph) == []
+        assert any("is not an IRI" in record.getMessage() for record in caplog.records)
+
+    def test_an_empty_policy_writes_nothing(self):
+        graph = serialize({"resources": [{"id": "r1", "uri": str(DIST), "has_policy": ""}]})
+
+        assert policies(graph) == []
+
+    def test_the_parse_of_the_serialization_gives_the_policy_back(self):
+        graph = serialize({"resources": [{"id": "r1", "uri": str(DIST), "has_policy": "http://example.org/policy"}]})
+        graph.add((DATASET, RDF.type, DCAT.Dataset))
+        graph.add((DATASET, DCAT.distribution, DIST))
+
+        (resource,) = _profile(graph).parse_dataset({"extras": []}, DATASET)["resources"]
+
+        assert resource["has_policy"] == "http://example.org/policy"
+
+    def test_the_health_dcat_ap_profile_does_not_write_the_policy(self):
+        graph = serialize(
+            {"resources": [{"id": "r1", "uri": str(DIST), "has_policy": "http://example.org/policy"}]},
+            EuropeanHealthDCATAPProfile,
+        )
+
+        assert policies(graph) == []
+

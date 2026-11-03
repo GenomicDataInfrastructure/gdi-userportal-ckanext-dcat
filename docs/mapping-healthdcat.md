@@ -53,6 +53,7 @@ Fields only R8 has (`healthdcat_r8` pack):
 | `related_resource` | `dct:relation` | list | In every profile this is also kept as a free extra by the shared DCAT-AP code; R8 makes it a schema field. |
 | `source` | `dct:source` | list | As `related_resource`, for `dct:source`. |
 | `resources[].access_services[].documentation` | `foaf:page` on the `dcat:DataService` | list of IRIs | |
+| `resources[].has_policy` | `odrl:hasPolicy` on the `dcat:Distribution` | IRI | At most one. The policy itself (its permissions and prohibitions) is not modelled: a policy that is a blank node is dropped with a warning, and a value that is not an IRI is not written. |
 
 ### Agents
 
