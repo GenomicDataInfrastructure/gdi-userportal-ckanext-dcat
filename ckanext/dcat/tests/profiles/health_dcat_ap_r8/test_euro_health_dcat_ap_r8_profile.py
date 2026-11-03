@@ -1287,3 +1287,71 @@ class TestEveryValuePerLanguageIsKept:
 def _multilingual(turtle, predicate):
     graph = Graph().parse(data=turtle, format="turtle")
     return _profile(graph)._object_value_multilingual(DATASET, predicate)
+
+
+def listed_schema():
+    """The R8 pack: the landing page and the type of a dataset are lists."""
+    return {
+        **SCHEMA,
+        "dataset_fields": [*SCHEMA["dataset_fields"], _field("url", **LISTED), _field("dcat_type", **LISTED)],
+    }
+
+
+LANDING_AND_TYPES_TTL = PREFIXES + """
+<http://example.org/dataset> a dcat:Dataset ;
+    dcat:landingPage <http://example.org/p2>, <http://example.org/p1> ;
+    dct:type <http://example.org/t2>, <http://example.org/t1> .
+"""
+
+
+class TestLandingPageAndTypeAreLists:
+    """dcat:landingPage and dct:type are 0..* in R8."""
+
+    def test_every_landing_page_and_type_is_parsed_sorted(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            dataset = parse(LANDING_AND_TYPES_TTL, schema=listed_schema())
+
+        assert dataset["url"] == ["http://example.org/p1", "http://example.org/p2"]
+        assert dataset["dcat_type"] == ["http://example.org/t1", "http://example.org/t2"]
+        assert not [r for r in caplog.records if "only the first is kept" in r.getMessage()]
+
+    def test_a_schema_that_holds_one_value_keeps_the_first_with_a_warning(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            dataset = parse(LANDING_AND_TYPES_TTL)
+
+        assert isinstance(dataset["url"], str) and isinstance(dataset.get("dcat_type", ""), str)
+        assert any("dcat_type" in r.getMessage() for r in caplog.records)
+        assert any("landingPage" in r.getMessage() for r in caplog.records)
+
+    def test_nothing_is_added_when_there_is_none(self):
+        dataset = parse(PREFIXES + "<http://example.org/dataset> a dcat:Dataset .", schema=listed_schema())
+
+        assert "url" not in dataset and "dcat_type" not in dataset
+
+    def test_every_landing_page_and_type_is_written(self):
+        graph = serialize(
+            {"url": ["http://example.org/p1", "http://example.org/p2"], "dcat_type": ["http://example.org/t1", "a free type"]},
+            schema=listed_schema(),
+        )
+
+        assert [str(v) for v in values(graph, DCAT.landingPage)] == ["http://example.org/p1", "http://example.org/p2"]
+        assert (URIRef("http://example.org/p1"), RDF.type, FOAF.Document) in graph
+        assert [str(v) for v in values(graph, DCT.type)] == ["a free type", "http://example.org/t1"]
+
+    def test_a_single_string_is_written_as_one_value(self):
+        graph = serialize({"url": "http://example.org/p1", "dcat_type": "http://example.org/t1"}, schema=listed_schema())
+
+        assert len(values(graph, DCAT.landingPage)) == 1
+        assert len(values(graph, DCT.type)) == 1
+
+    def test_a_schema_that_holds_one_value_still_writes_it(self):
+        graph = serialize({"url": "http://example.org/p1", "dcat_type": "http://example.org/t1"})
+
+        assert [str(v) for v in values(graph, DCAT.landingPage)] == ["http://example.org/p1"]
+        assert [str(v) for v in values(graph, DCT.type)] == ["http://example.org/t1"]
+
+    def test_it_round_trips(self):
+        dataset = parse(LANDING_AND_TYPES_TTL, schema=listed_schema())
+        again = parse(serialize(dataset, schema=listed_schema()).serialize(format="turtle"), schema=listed_schema())
+
+        assert (again["url"], again["dcat_type"]) == (dataset["url"], dataset["dcat_type"])

@@ -90,12 +90,18 @@ PUBLISHER_TYPE = ("publisher-type", LOWERCASE_CODE)
 HEALTH_ACTIVITY_TYPE = ("health-activity", UPPERCASE_CODE)
 AGENT_PREDICATES = (DCT.publisher, DCT.creator, HEALTHDCATAP.hdab, GEODCATAP.custodian, HEALTHDCATAP.hdabCoordinator)
 
-# R8 allows several values where the CKAN field holds one. The field stays single-valued
-# (ADR 0001, Q3): the first value is kept and the others are dropped, with a warning.
+# R8 allows several values where the CKAN field holds one. When the loaded schema keeps the field
+# single-valued (`identifier` always; `dcat_type` and `url` unless the schema lists them, see LISTABLE),
+# the first value is kept and the others are dropped, with a warning (ADR 0001, Q3).
 SINGLE_VALUED = (
     (DCT.identifier, "identifier"),
     (DCT.type, "dcat_type"),
     (DCAT.landingPage, "url"),
+)
+# R8 gives these 0..*: lists when the loaded schema says so (the R8 pack), single-valued otherwise.
+LISTABLE = (
+    ("url", DCAT.landingPage),
+    ("dcat_type", DCT.type),
 )
 
 BOOLEANS = {"true": True, "1": True, "false": False, "0": False}
@@ -136,7 +142,9 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
             dataset_dict["variables"] = variables
 
         for predicate, field in SINGLE_VALUED:
-            self._warn_about_dropped_values(dataset_ref, predicate, field)
+            if not self._dataset_field_is_list(field):
+                self._warn_about_dropped_values(dataset_ref, predicate, field)
+        self._read_the_listed_fields(dataset_dict, dataset_ref)
         self._warn_about_dropped_values_of_distributions(dataset_ref)
 
         self._parse_access_service_documentation(dataset_dict)
@@ -148,8 +156,10 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
         return dataset_dict
 
     def graph_from_dataset(self, dataset_dict, dataset_ref):
-        super().graph_from_dataset({**dataset_dict, "qualified_attribution": []}, dataset_ref)
+        listed = {key: None for key, _ in LISTABLE if self._dataset_field_is_list(key)}
+        super().graph_from_dataset({**dataset_dict, **listed, "qualified_attribution": []}, dataset_ref)
         self._add_qualified_attributions(dataset_ref, dataset_dict)
+        self._add_the_listed_fields(dataset_ref, dataset_dict, listed)
 
         for prefix, namespace in namespaces.items():
             self.g.bind(prefix, namespace)
@@ -656,6 +666,38 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
 
     def _strings(self, value):
         return [str(item).strip() for item in self._as_list(value) if str(item).strip()]
+
+    # --- landing page and type: 0..* ---------------------------------------------------------
+
+    def _dataset_field_is_list(self, field_name):
+        """Whether the loaded schema holds several values in this dataset field. A field it lacks holds one."""
+        field = self._schema_field(field_name)
+        if not field:
+            return False
+        return field.get("preset") == "multiple_text" or "scheming_multiple_text" in str(field.get("validators", ""))
+
+    def _read_the_listed_fields(self, dataset_dict, dataset_ref):
+        for key, predicate in LISTABLE:
+            if not self._dataset_field_is_list(key):
+                continue
+            values = sorted({text for text in self._object_value_list(dataset_ref, predicate) if text})
+            dataset_dict["extras"] = [e for e in dataset_dict.get("extras", []) if e.get("key") != key]
+            dataset_dict.pop(key, None)
+            if values:
+                dataset_dict[key] = values
+
+    def _add_the_listed_fields(self, dataset_ref, dataset_dict, listed):
+        """Writes every landing page and type; the shared writer was given none of them."""
+        for key, predicate in LISTABLE:
+            if key not in listed:
+                continue
+            for value in self._strings(dataset_dict.get(key)):
+                if key == "url":
+                    target = CleanedURIRef(value)
+                    self.g.add((dataset_ref, predicate, target))
+                    self.g.add((target, RDF.type, FOAF.Document))
+                else:
+                    self.g.add((dataset_ref, predicate, URIRefOrLiteral(value)))
 
     # --- qualified attributions: an agent and one or more roles --------------------------
 

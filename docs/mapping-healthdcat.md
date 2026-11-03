@@ -95,9 +95,11 @@ example) as it is. There is no crosswalk from those to the new vocabularies.
 
 ### Values R8 allows several of
 
-R8 allows several values for `identifier`, `dcat_type` and the landing page (`url`). These CKAN
-fields stay single-valued (ADR 0001, Q3): the R8 profile keeps the first value and logs a warning
-when it drops others.
+R8 allows several values for `dcat_type` (`dct:type`) and the landing page (`url`,
+`dcat:landingPage`), and the R8 pack makes both lists: the profile reads every value, sorted, and
+writes all of them. A schema that holds one value in them (`gdi_current` listed first) keeps the
+first, with a warning. `identifier` stays single-valued (ADR 0001, Q3): the first value is kept and a
+warning logged.
 
 ### Language-specific values
 
