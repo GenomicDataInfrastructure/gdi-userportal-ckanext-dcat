@@ -6,7 +6,7 @@ from rdflib import DCAT, FOAF, PROV, RDF, RDFS, XSD, BNode, Literal, URIRef
 from rdflib.namespace import DCTERMS as DCT
 from rdflib.namespace import SKOS, Namespace
 
-from ckanext.dcat.profiles.base import VCARD, CleanedURIRef
+from ckanext.dcat.profiles.base import VCARD, CleanedURIRef, URIRefOrLiteral
 from ckanext.dcat.utils import resource_uri
 from ckanext.dcat.profiles.euro_health_dcat_ap import (
     DPV,
@@ -572,7 +572,8 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
                     self._warn_about_dropped_values(service_ref, predicate, f"access_services.{field}")
         for relation_ref in self.g.objects(dataset_ref, DCAT.qualifiedRelation):
             for predicate, field in ((DCAT.hadRole, "role"), (DCT.relation, "relation")):
-                self._warn_about_dropped_values(relation_ref, predicate, f"qualified_relation.{field}")
+                if not self._relationship_subfield_is_list(field):
+                    self._warn_about_dropped_values(relation_ref, predicate, f"qualified_relation.{field}")
 
     def _drop_what_the_schema_has_no_subfield_for(self, dataset_dict):
         """With gdi_current listed first its narrower agent and data service fields win; keep the dict valid."""
@@ -654,6 +655,50 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
 
     def _strings(self, value):
         return [str(item).strip() for item in self._as_list(value) if str(item).strip()]
+
+    # --- qualified relations: role and relation are 1..n ---------------------------------
+
+    RELATIONSHIP_SUBFIELDS = (("relation", DCT.relation, RDFS.Resource), ("role", DCAT.hadRole, DCAT.Role))
+
+    def _relationship_subfield_is_list(self, subfield):
+        """Whether the loaded schema holds several values in this subfield of qualified_relation (R8 does)."""
+        field = self._schema_field("qualified_relation")
+        sub = next((f for f in (field or {}).get("repeating_subfields", []) if f["field_name"] == subfield), None)
+        if sub is None:
+            return True
+        return sub.get("preset") == "multiple_text" or "scheming_multiple_text" in str(sub.get("validators", ""))
+
+    def _relationship_details(self, subject, predicate):
+        """A dcat:Relationship has one or more dct:relation and dcat:hadRole in R8.
+
+        A subfield the loaded schema holds one value in (gdi_current listed first) keeps the first
+        value, with the warning of the dropped values.
+        """
+        relations = []
+        for node in self.g.objects(subject, predicate):
+            details = {"uri": str(node) if isinstance(node, URIRef) else ""}
+            for key, rdf_predicate, _class in self.RELATIONSHIP_SUBFIELDS:
+                if self._relationship_subfield_is_list(key):
+                    details[key] = sorted(set(self._object_value_list(node, rdf_predicate)))
+                else:
+                    details[key] = self._object_value(node, rdf_predicate)
+            relations.append(details)
+        return relations
+
+    def _add_relationship(self, dataset_ref, dataset_dict, relation_key, rdf_predicate):
+        """Writes every relation and role of each relationship, not only the first."""
+        for relation in self._as_list_of_dicts(dataset_dict.get(relation_key)):
+            if not any(relation.values()):
+                continue
+            node = CleanedURIRef(relation["uri"]) if relation.get("uri") else BNode()
+            self.g.add((node, RDF.type, DCAT.Relationship))
+            self.g.add((dataset_ref, rdf_predicate, node))
+            for key, rdf_property, _class in self.RELATIONSHIP_SUBFIELDS:
+                for value in self._strings(relation.get(key)):
+                    target = URIRefOrLiteral(value)
+                    self.g.add((node, rdf_property, target))
+                    if isinstance(target, URIRef):
+                        self.g.add((target, RDF.type, _class))
 
     # --- small helpers -------------------------------------------------------------------
 

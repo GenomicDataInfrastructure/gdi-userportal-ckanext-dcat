@@ -78,6 +78,7 @@ SCHEMA = {
         _field("custodian", repeating_subfields=_agent_subfields(*CONTACT_POINT)),
         _field("hdab_coordinator", repeating_subfields=_agent_subfields(*CONTACT_POINT)),
         _field("variables", repeating_subfields=[_field("title_translated"), _field("tables")]),
+        _field("qualified_relation", repeating_subfields=[_field("uri"), _field("relation", **LISTED), _field("role", **LISTED)]),
     ],
     "resource_fields": [
         _field("access_services", repeating_subfields=[_field("title"), _field("documentation")]),
@@ -1083,3 +1084,93 @@ class TestContactPointCardinality:
         for key in ("email", "url", "telephone"):
             assert again[key] == hdab[key], key
 
+
+
+RELATIONSHIP_TTL = PREFIXES + """
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+<http://example.org/dataset> a dcat:Dataset ;
+    dcat:qualifiedRelation <http://example.org/rel> .
+<http://example.org/rel> a dcat:Relationship ;
+    dct:relation <http://example.org/other-b>, <http://example.org/other-a> ;
+    dcat:hadRole <http://example.org/role-b>, <http://example.org/role-a> .
+"""
+
+
+def single_relation_schema():
+    """A relationship whose relation and role hold one value (the gdi_current one)."""
+    plain = [_field(n) for n in ("uri", "relation", "role")]
+    return {
+        **SCHEMA,
+        "dataset_fields": [
+            _field("qualified_relation", repeating_subfields=plain) if f["field_name"] == "qualified_relation" else f
+            for f in SCHEMA["dataset_fields"]
+        ],
+    }
+
+
+class TestQualifiedRelationCardinality:
+    """dcat:Relationship: dct:relation and dcat:hadRole are 1..n (R8, Relationship)."""
+
+    def test_every_relation_and_role_is_parsed_sorted(self):
+        (relation,) = parse(RELATIONSHIP_TTL)["qualified_relation"]
+
+        assert relation["uri"] == "http://example.org/rel"
+        assert relation["relation"] == ["http://example.org/other-a", "http://example.org/other-b"]
+        assert relation["role"] == ["http://example.org/role-a", "http://example.org/role-b"]
+
+    def test_a_schema_that_holds_one_value_gets_one_with_a_warning(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            (relation,) = parse(RELATIONSHIP_TTL, schema=single_relation_schema())["qualified_relation"]
+
+        assert isinstance(relation["relation"], str) and isinstance(relation["role"], str)
+        messages = [record.getMessage() for record in caplog.records]
+        assert any("qualified_relation.relation" in m for m in messages)
+        assert any("qualified_relation.role" in m for m in messages)
+
+    def test_a_list_valued_schema_does_not_warn(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            parse(RELATIONSHIP_TTL)
+
+        assert not [r for r in caplog.records if "qualified_relation" in r.getMessage()]
+
+    def test_every_relation_and_role_is_written(self):
+        graph = serialize(
+            {
+                "qualified_relation": [
+                    {
+                        "uri": "http://example.org/rel",
+                        "relation": ["http://example.org/other-a", "a free text relation, with a comma"],
+                        "role": ["http://example.org/role-a", "http://example.org/role-b"],
+                    }
+                ]
+            }
+        )
+        rel = URIRef("http://example.org/rel")
+
+        assert (DATASET, DCAT.qualifiedRelation, rel) in graph
+        assert (rel, RDF.type, DCAT.Relationship) in graph
+        assert [str(v) for v in values(graph, DCT.relation, rel)] == [
+            "a free text relation, with a comma",
+            "http://example.org/other-a",
+        ]
+        assert [str(v) for v in values(graph, DCAT.hadRole, rel)] == ["http://example.org/role-a", "http://example.org/role-b"]
+        assert (URIRef("http://example.org/role-a"), RDF.type, DCAT.Role) in graph
+        assert (URIRef("http://example.org/other-a"), RDF.type, RDFS.Resource) in graph
+
+    def test_a_single_string_value_is_written_as_one_value(self):
+        graph = serialize({"qualified_relation": [{"relation": "http://example.org/a, b", "role": "http://example.org/r"}]})
+        (rel,) = graph.objects(DATASET, DCAT.qualifiedRelation)
+
+        assert len(values(graph, DCT.relation, rel)) == 1
+        assert len(values(graph, DCAT.hadRole, rel)) == 1
+
+    def test_an_empty_relationship_is_not_written(self):
+        graph = serialize({"qualified_relation": [{"uri": "", "relation": [], "role": []}]})
+
+        assert not list(graph.objects(DATASET, DCAT.qualifiedRelation))
+
+    def test_it_round_trips(self):
+        (relation,) = parse(RELATIONSHIP_TTL)["qualified_relation"]
+        again = parse(serialize({"qualified_relation": [relation]}).serialize(format="turtle"))["qualified_relation"]
+
+        assert again == [relation]
