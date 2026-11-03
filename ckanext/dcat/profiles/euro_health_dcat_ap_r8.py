@@ -143,6 +143,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
         self._parse_has_policy(dataset_dict, dataset_ref)
         self._make_contact_urls_single(dataset_dict)
         self._drop_what_the_schema_has_no_subfield_for(dataset_dict)
+        self._drop_what_is_not_an_r8_distribution_property(dataset_dict)
 
         return dataset_dict
 
@@ -487,8 +488,25 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
                 if resource_dict.get("distribution_ref") == str(distribution_ref):
                     resource_dict["has_policy"] = iris[0]
 
+    @staticmethod
+    def _drop_what_is_not_an_r8_distribution_property(dataset_dict):
+        """The HealthDCAT-AP parse reads a retention period of a distribution; R8 has it on the dataset only.
+
+        ``distribution_ref`` only links a resource to its node while parsing.
+        """
+        for resource_dict in dataset_dict.get("resources", []):
+            resource_dict.pop("retention_period", None)
+            resource_dict.pop("distribution_ref", None)
+
+    def _remove_distribution_retention_period(self, distribution_ref):
+        for period in list(self.g.objects(distribution_ref, HEALTHDCATAP.retentionPeriod)):
+            if isinstance(period, BNode):
+                self.g.remove((period, None, None))
+        self.g.remove((distribution_ref, HEALTHDCATAP.retentionPeriod, None))
+
     def _graph_from_resource(self, resource_dict):
         distribution_ref = CleanedURIRef(resource_uri(resource_dict))
+        self._remove_distribution_retention_period(distribution_ref)
         policy = self._first_value(resource_dict.get("has_policy"))
         if policy:
             if IRI_SCHEME.match(policy):

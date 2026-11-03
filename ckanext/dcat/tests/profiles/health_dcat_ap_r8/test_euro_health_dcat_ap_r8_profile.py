@@ -951,3 +951,51 @@ class TestDistributionPolicy:
 
         assert policies(graph) == []
 
+
+RETENTION_TTL = POLICY_TTL % """healthdcatap:retentionPeriod [ a dct:PeriodOfTime ;
+        dcat:startDate "2020-01-01"^^xsd:date ; dcat:endDate "2030-01-01"^^xsd:date ]"""
+
+
+class TestDistributionKeys:
+    """What a distribution keeps after the parse is what R8 defines on it."""
+
+    def test_the_retention_period_of_a_distribution_is_not_read(self):
+        (resource,) = parse(RETENTION_TTL)["resources"]
+
+        assert "retention_period" not in resource
+
+    def test_the_health_dcat_ap_profile_still_reads_it(self):
+        (resource,) = parse(RETENTION_TTL, EuropeanHealthDCATAPProfile)["resources"]
+
+        assert resource["retention_period"]
+
+    def test_the_link_to_the_distribution_node_is_not_kept(self):
+        (resource,) = parse(POLICY_TTL % "dct:title \"d\"")["resources"]
+
+        assert "distribution_ref" not in resource
+
+    def test_the_policy_is_read_before_the_link_is_dropped(self):
+        (resource,) = parse(POLICY_TTL % "odrl:hasPolicy <http://example.org/policy>")["resources"]
+
+        assert resource["has_policy"] == "http://example.org/policy"
+        assert "distribution_ref" not in resource
+
+    def test_a_retention_period_of_a_resource_is_not_serialized(self):
+        resource = {"id": "r1", "uri": str(DIST), "retention_period": [{"start": "2020-01-01", "end": "2030-01-01"}]}
+
+        graph = serialize({"resources": [resource]})
+
+        assert values(graph, HEALTHDCATAP.retentionPeriod, DIST) == []
+
+    def test_the_health_dcat_ap_profile_still_serializes_it(self):
+        resource = {"id": "r1", "uri": str(DIST), "retention_period": [{"start": "2020-01-01", "end": "2030-01-01"}]}
+
+        graph = serialize({"resources": [resource]}, EuropeanHealthDCATAPProfile)
+
+        assert values(graph, HEALTHDCATAP.retentionPeriod, DIST)
+
+    def test_the_retention_period_of_the_dataset_is_still_serialized(self):
+        graph = serialize({"retention_period": [{"start": "2020-01-01", "end": "2030-01-01"}], "resources": []})
+
+        assert values(graph, HEALTHDCATAP.retentionPeriod)
+
