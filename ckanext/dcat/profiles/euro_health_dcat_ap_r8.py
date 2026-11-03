@@ -251,6 +251,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
         agents = super()._agents_details(subject, predicate)
         for agent, agent_ref in zip(agents, self.g.objects(subject, predicate)):
             self._read_contact_point(agent, agent_ref)
+            self._match_the_contact_subfields_to_the_schema(agent)
             if predicate == DCT.publisher:
                 self._read_description_as_note(agent, agent_ref)
         return agents
@@ -267,16 +268,28 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
             )
         contact_point = contact_points[0]
 
-        email = self._without_mailto(self._first(contact_point, CV.email))
-        if email:
-            agent["email"] = email
-        page = self._first(contact_point, CV.contactPage)
-        if page:
-            agent["url"] = page
-        telephone = self._first(contact_point, CV.telephone)
-        if telephone:
-            agent["telephone"] = telephone
-        self._warn_about_dropped_values(contact_point, CV.telephone, "telephone")
+        # cv:email, cv:contactPage and cv:telephone are 0..n on a cv:ContactPoint
+        for key, predicate in (("email", CV.email), ("url", CV.contactPage), ("telephone", CV.telephone)):
+            found = sorted(
+                {
+                    self._without_mailto(str(value)) if key == "email" else str(value)
+                    for value in self.g.objects(contact_point, predicate)
+                }
+                - {""}
+            )
+            if not found:
+                continue
+            if self._agent_subfield_is_list(key):
+                agent[key] = found
+            else:
+                if len(found) > 1:
+                    log.warning(
+                        "%s has %d values for %s but the loaded schema holds one; only the first is kept",
+                        agent_ref,
+                        len(found),
+                        key,
+                    )
+                agent[key] = found[0]
 
         for key, predicate in (
             ("opening_hours", CV.openingHours),
@@ -319,22 +332,22 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
             # The same agent in another role: R8 allows one contact point
             return
 
-        email = self._first_value(agent.get("email"))
-        page = self._first_value(agent.get("url"))
-        telephone = self._first_value(agent.get("telephone"))
+        emails = self._strings(agent.get("email"))
+        pages = self._strings(agent.get("url"))
+        telephones = self._strings(agent.get("telephone"))
         hours = self._as_list_of_dicts(agent.get("opening_hours"))
         special_hours = self._as_list_of_dicts(agent.get("special_opening_hours"))
-        if not (email or page or telephone or hours or special_hours):
+        if not (emails or pages or telephones or hours or special_hours):
             return
 
         contact_point = BNode()
         self.g.add((agent_ref, CV.contactPoint, contact_point))
         self.g.add((contact_point, RDF.type, CV.ContactPoint))
-        if email:
+        for email in emails:
             self.g.add((contact_point, CV.email, Literal(self._without_mailto(email))))
-        if page:
+        for page in pages:
             self.g.add((contact_point, CV.contactPage, URIRef(page)))
-        if telephone:
+        for telephone in telephones:
             self.g.add((contact_point, CV.telephone, Literal(telephone)))
         self._add_temporal_entities(contact_point, CV.openingHours, hours)
         self._add_temporal_entities(contact_point, CV.specialOpeningHoursSpecification, special_hours)
@@ -621,6 +634,26 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
         if isinstance(contact, dict) and "url" in contact and self._contact_url_is_single():
             contact = {**contact, "url": self._single_contact_url(contact)}
         super()._add_contact_to_graph(subject, predicate, contact)
+
+    def _match_the_contact_subfields_to_the_schema(self, agent):
+        """The flat vcard and foaf terms give a plain string; the schema may want a list, or one value."""
+        for key in ("email", "url", "telephone"):
+            value = agent.get(key)
+            if not value:
+                continue
+            values = self._strings(value)
+            agent[key] = values if self._agent_subfield_is_list(key) else values[0]
+
+    def _agent_subfield_is_list(self, subfield):
+        """Whether the loaded schema holds several values in this subfield of the agents (R8 does)."""
+        field = self._schema_field("publisher")
+        sub = next((f for f in (field or {}).get("repeating_subfields", []) if f["field_name"] == subfield), None)
+        if sub is None:
+            return True
+        return sub.get("preset") == "multiple_text" or "scheming_multiple_text" in str(sub.get("validators", ""))
+
+    def _strings(self, value):
+        return [str(item).strip() for item in self._as_list(value) if str(item).strip()]
 
     # --- small helpers -------------------------------------------------------------------
 

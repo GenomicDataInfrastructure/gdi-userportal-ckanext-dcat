@@ -64,9 +64,12 @@ Fields only R8 has (`healthdcat_r8` pack):
 - **`euro_health_dcat_ap_r8`**: every health agent has one `cv:ContactPoint` holding the email
   (`cv:email`), the contact page (`cv:contactPage`), the telephone (`cv:telephone`) and the opening
   hours (`cv:openingHours`, `cv:specialOpeningHoursSpecification`, as `time:TemporalEntity`). The
-  publisher note is written as `dct:description`. The flat terms of the other profile are still
-  read, for agents that carry them, and are not written. When R8 gives an agent several contact
-  points only the first is read, with a warning.
+  publisher note is written as `dct:description`. The email, the contact page and the telephone are
+  `0..n` on a contact point, so `email`, `url` and `telephone` are lists and every value is read and
+  written (sorted, so a re-parse is stable). The flat terms of the other profile are still read, for
+  agents that carry them, and are not written. When R8 gives an agent several contact points only the
+  first is read, with a warning. A schema that holds one value in these subfields (the `gdi_current`
+  agent) gets the first value, with a warning.
 
 The subfields R8 adds to the contact point (`telephone`, `opening_hours`, `special_opening_hours`)
 exist in the schema only when `healthdcat_r8` decides the shared agent fields; see the pack order in

@@ -43,9 +43,13 @@ def _field(name, **extra):
     return {"field_name": name, "label": name, **extra}
 
 
+LISTED = {"preset": "multiple_text", "validators": "ignore_missing scheming_multiple_text"}
+
+
 def _agent_subfields(*extra):
+    """The agent of the R8 pack: the email, contact page and telephone of its contact point are lists."""
     return [
-        _field(n)
+        _field(n, **(LISTED if n in ("email", "url", "telephone") else {}))
         for n in ("uri", "name", "name_translated", "email", "url", "type", "publisher_note", *extra)
     ]
 
@@ -337,9 +341,9 @@ class TestHealthAgents:
     def test_the_contact_point_is_read_into_the_flat_subfields(self):
         (hdab,) = parse(HDAB_TTL)["hdab"]
 
-        assert hdab["email"] == "hdab@example.org"
-        assert hdab["url"] == "https://example.org/contact"
-        assert hdab["telephone"] == "+32 2 555 0102"
+        assert hdab["email"] == ["hdab@example.org"]
+        assert hdab["url"] == ["https://example.org/contact"]
+        assert hdab["telephone"] == ["+32 2 555 0102"]
         assert hdab["opening_hours"] == [
             {
                 "description_translated": {"en": "Weekdays 08:30-16:30"},
@@ -351,8 +355,8 @@ class TestHealthAgents:
     def test_the_custodian_and_the_coordinator_are_parsed(self):
         dataset = parse(HDAB_TTL)
 
-        assert dataset["hdab_coordinator"][0]["email"] == "coordinator@example.org"
-        assert dataset["custodian"][0]["url"] == "https://example.org/custodian"
+        assert dataset["hdab_coordinator"][0]["email"] == ["coordinator@example.org"]
+        assert dataset["custodian"][0]["url"] == ["https://example.org/custodian"]
         assert dataset["custodian"][0]["name"] == "Custodian"
 
     def test_an_agent_without_a_contact_point_keeps_what_the_base_parse_gives(self):
@@ -362,7 +366,7 @@ class TestHealthAgents:
         )
 
         (hdab,) = dataset["hdab"]
-        assert hdab["email"] == "a@example.org"
+        assert hdab["email"] == ["a@example.org"]
         assert "telephone" not in hdab
 
     def test_several_contact_points_give_a_warning_and_the_first_is_read(self, caplog):
@@ -373,16 +377,16 @@ class TestHealthAgents:
                 '<http://example.org/a> a foaf:Agent ; foaf:name "A" ; cv:contactPoint [ cv:email "a@example.org" ] , [ cv:email "b@example.org" ] .'
             )
 
-        assert dataset["hdab"][0]["email"] in ("a@example.org", "b@example.org")
+        assert dataset["hdab"][0]["email"] in (["a@example.org"], ["b@example.org"])
         assert any("cv:contactPoint" in r.getMessage() for r in caplog.records)
 
     AGENT = {
         "uri": "http://example.org/hdab",
         "name": "Belgian HDAB",
         "name_translated": {"en": "Belgian HDAB"},
-        "email": "hdab@example.org",
-        "url": "https://example.org/contact",
-        "telephone": "+32 2 555 0102",
+        "email": ["hdab@example.org"],
+        "url": ["https://example.org/contact"],
+        "telephone": ["+32 2 555 0102"],
         "opening_hours": [
             {
                 "description_translated": {"en": "Weekdays 08:30-16:30"},
@@ -697,7 +701,7 @@ class TestWhatTheSchemaHasNoSubfieldFor:
         with mock.patch.object(base, "get_action", lambda name: lambda ctx, data: narrow):
             (hdab,) = EuropeanHealthDCATAPR8Profile(graph).parse_dataset({"extras": []}, DATASET)["hdab"]
 
-        assert hdab["email"] == "hdab@example.org"
+        assert hdab["email"] == ["hdab@example.org"]
         assert not set(CONTACT_POINT) & set(hdab)
 
     def test_the_subfields_are_kept_when_the_schema_has_them(self):
@@ -998,4 +1002,84 @@ class TestDistributionKeys:
         graph = serialize({"retention_period": [{"start": "2020-01-01", "end": "2030-01-01"}], "resources": []})
 
         assert values(graph, HEALTHDCATAP.retentionPeriod)
+
+
+MANY_TTL = AGENT_PREFIXES + """
+<http://example.org/dataset> a dcat:Dataset ; healthdcatap:hdab <http://example.org/hdab> .
+<http://example.org/hdab> a foaf:Agent ; foaf:name "HDAB" ;
+    cv:contactPoint [ a cv:ContactPoint ;
+        cv:email "b@example.org", "a@example.org" ;
+        cv:contactPage <https://example.org/page-b>, <https://example.org/page-a> ;
+        cv:telephone "+32 2 555 0102", "+32 2 555 0101" ] .
+"""
+
+
+def single_valued_schema():
+    """An agent whose email, contact page and telephone hold one value (the gdi_current agent)."""
+    plain = [_field(n) for n in ("uri", "name", "name_translated", "email", "url", "type", "publisher_note", *CONTACT_POINT)]
+    return {
+        **SCHEMA,
+        "dataset_fields": [
+            _field(f["field_name"], repeating_subfields=plain) if f["field_name"] in ("publisher", "hdab") else f
+            for f in SCHEMA["dataset_fields"]
+        ],
+    }
+
+
+class TestContactPointCardinality:
+    """cv:ContactPoint: cv:email, cv:contactPage and cv:telephone are 0..n (R8, Contact point)."""
+
+    def test_every_email_page_and_telephone_is_read_in_a_fixed_order(self):
+        (hdab,) = parse(MANY_TTL)["hdab"]
+
+        assert hdab["email"] == ["a@example.org", "b@example.org"]
+        assert hdab["url"] == ["https://example.org/page-a", "https://example.org/page-b"]
+        assert hdab["telephone"] == ["+32 2 555 0101", "+32 2 555 0102"]
+
+    def test_every_value_is_serialized_on_the_one_contact_point(self):
+        agent = {
+            "uri": "http://example.org/hdab",
+            "name": "HDAB",
+            "email": ["a@example.org", "b@example.org"],
+            "url": ["https://example.org/page-a", "https://example.org/page-b"],
+            "telephone": ["+32 2 555 0101", "+32 2 555 0102"],
+        }
+
+        graph = serialize({"hdab": [agent]})
+
+        (contact_point,) = values(graph, CV.contactPoint, URIRef("http://example.org/hdab"))
+        assert values(graph, CV.email, contact_point) == [Literal("a@example.org"), Literal("b@example.org")]
+        assert values(graph, CV.contactPage, contact_point) == [
+            URIRef("https://example.org/page-a"),
+            URIRef("https://example.org/page-b"),
+        ]
+        assert len(values(graph, CV.telephone, contact_point)) == 2
+
+    def test_a_single_value_is_serialized_as_before(self):
+        agent = {"uri": "http://example.org/hdab", "name": "HDAB", "email": "a@example.org", "telephone": "123"}
+
+        graph = serialize({"hdab": [agent]})
+
+        (contact_point,) = values(graph, CV.contactPoint, URIRef("http://example.org/hdab"))
+        assert values(graph, CV.email, contact_point) == [Literal("a@example.org")]
+        assert values(graph, CV.telephone, contact_point) == [Literal("123")]
+
+    def test_a_schema_that_holds_one_value_keeps_the_first_with_a_warning(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            (hdab,) = parse(MANY_TTL, schema=single_valued_schema())["hdab"]
+
+        assert hdab["email"] == "a@example.org"
+        assert hdab["url"] == "https://example.org/page-a"
+        assert any("holds one" in record.getMessage() for record in caplog.records)
+
+    def test_the_parse_of_the_serialization_gives_all_values_back(self):
+        (hdab,) = parse(MANY_TTL)["hdab"]
+
+        graph = serialize({"hdab": [hdab]})
+        graph.add((DATASET, RDF.type, DCAT.Dataset))
+        graph.add((DATASET, HEALTHDCATAP.hdab, URIRef(hdab["uri"])))
+        (again,) = _profile(graph).parse_dataset({"extras": []}, DATASET)["hdab"]
+
+        for key in ("email", "url", "telephone"):
+            assert again[key] == hdab[key], key
 
