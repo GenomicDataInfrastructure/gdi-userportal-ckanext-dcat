@@ -137,6 +137,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
         self._warn_about_dropped_values_of_distributions(dataset_ref)
 
         self._parse_access_service_documentation(dataset_dict)
+        self._make_contact_urls_single(dataset_dict)
         self._drop_what_the_schema_has_no_subfield_for(dataset_dict)
 
         return dataset_dict
@@ -524,6 +525,45 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
                 for service in services:
                     if isinstance(service, dict):
                         service.pop("documentation", None)
+
+    # --- contact points: one contact page ------------------------------------------------
+
+    def _contact_url_is_single(self):
+        """R8's vcard:Kind has at most one vcard:hasURL, so the url of a contact is one value.
+
+        A schema that still lists the URLs (gdi_current listed first) keeps its list.
+        """
+        field = self._schema_field("contact")
+        url = next((f for f in (field or {}).get("repeating_subfields", []) if f["field_name"] == "url"), None)
+        return not (url and "scheming_multiple_text" in str(url.get("validators", "")))
+
+    def _single_contact_url(self, contact):
+        urls = self._as_list(contact.get("url"))
+        if len(urls) > 1:
+            log.warning(
+                "contact %s has %d URLs but R8 allows one vcard:hasURL; only the first is kept",
+                contact.get("uri") or contact.get("email") or "(unnamed)",
+                len(urls),
+            )
+        return urls[0] if urls else ""
+
+    def _make_contact_urls_single(self, dataset_dict):
+        if not self._contact_url_is_single():
+            return
+
+        contacts = self._as_list_of_dicts(dataset_dict.get("contact"))
+        for resource_dict in dataset_dict.get("resources", []):
+            for service in self._as_list_of_dicts(resource_dict.get("access_services")):
+                contacts.extend(self._as_list_of_dicts(service.get("contact")))
+
+        for contact in contacts:
+            if "url" in contact:
+                contact["url"] = self._single_contact_url(contact)
+
+    def _add_contact_to_graph(self, subject, predicate, contact):
+        if isinstance(contact, dict) and "url" in contact and self._contact_url_is_single():
+            contact = {**contact, "url": self._single_contact_url(contact)}
+        super()._add_contact_to_graph(subject, predicate, contact)
 
     # --- small helpers -------------------------------------------------------------------
 

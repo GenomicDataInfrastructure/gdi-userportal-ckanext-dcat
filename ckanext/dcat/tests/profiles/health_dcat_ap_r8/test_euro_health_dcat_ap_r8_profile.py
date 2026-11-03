@@ -67,6 +67,7 @@ SCHEMA = {
         _field("legal_basis", preset="multiple_text", validators="ignore_missing scheming_multiple_text"),
         _field("personal_data", preset="multiple_text", validators="ignore_missing scheming_multiple_text"),
         _field("purpose", preset="multiple_text", validators="ignore_missing scheming_multiple_text"),
+        _field("contact", repeating_subfields=[_field("uri"), _field("name"), _field("email"), _field("url")]),
         _field("publisher", repeating_subfields=_agent_subfields(*CONTACT_POINT)),
         _field("hdab", repeating_subfields=_agent_subfields(*CONTACT_POINT)),
         _field("custodian", repeating_subfields=_agent_subfields(*CONTACT_POINT)),
@@ -79,19 +80,19 @@ SCHEMA = {
 }
 
 
-def _profile(graph, profile_class=EuropeanHealthDCATAPR8Profile):
-    with mock.patch.object(base, "get_action", lambda name: lambda ctx, data: SCHEMA):
+def _profile(graph, profile_class=EuropeanHealthDCATAPR8Profile, schema=SCHEMA):
+    with mock.patch.object(base, "get_action", lambda name: lambda ctx, data: schema):
         return profile_class(graph)
 
 
-def parse(turtle, profile_class=EuropeanHealthDCATAPR8Profile):
+def parse(turtle, profile_class=EuropeanHealthDCATAPR8Profile, schema=SCHEMA):
     graph = Graph().parse(data=turtle, format="turtle")
-    return _profile(graph, profile_class).parse_dataset({"extras": []}, DATASET)
+    return _profile(graph, profile_class, schema).parse_dataset({"extras": []}, DATASET)
 
 
-def serialize(dataset_dict, profile_class=EuropeanHealthDCATAPR8Profile):
+def serialize(dataset_dict, profile_class=EuropeanHealthDCATAPR8Profile, schema=SCHEMA):
     graph = Graph()
-    _profile(graph, profile_class).graph_from_dataset({"id": "1", "name": "test", **dataset_dict}, DATASET)
+    _profile(graph, profile_class, schema).graph_from_dataset({"id": "1", "name": "test", **dataset_dict}, DATASET)
     return graph
 
 
@@ -791,3 +792,81 @@ class TestVocabularyIris:
         graph = serialize({"health_category": ["EHRS"]}, EuropeanHealthDCATAPProfile)
 
         assert values(graph, HEALTHDCATAP.healthCategory) == [Literal("EHRS")]
+
+
+CONTACT_TTL = PREFIXES + """
+@prefix vcard: <http://www.w3.org/2006/vcard/ns#> .
+<http://example.org/dataset> a dcat:Dataset ;
+    dcat:contactPoint [ a vcard:Kind ; vcard:hasURL <https://example.org/support> ;
+                        vcard:hasEmail <mailto:support@example.org> ] .
+"""
+
+# gdi_current lists the urls of a contact, so with it listed first the field keeps its list
+LISTED_URLS_SCHEMA = {
+    **SCHEMA,
+    "dataset_fields": [
+        _field("contact", repeating_subfields=[
+            _field("email"),
+            _field("url", preset="multiple_text", validators="ignore_missing scheming_multiple_text"),
+        ])
+    ],
+}
+
+
+def contact_urls(graph):
+    (contact,) = values(graph, DCAT.contactPoint)
+    return values(graph, VCARD.hasURL, contact)
+
+
+class TestContactPage:
+    """vcard:Kind has at most one vcard:hasURL in R8 (Kind_Shape), the contact page."""
+
+    def test_the_contact_page_is_parsed_as_one_value(self):
+        (contact,) = parse(CONTACT_TTL)["contact"]
+
+        assert contact["url"] == "https://example.org/support"
+        assert contact["email"] == "support@example.org"
+
+    def test_a_contact_without_a_page_has_an_empty_url(self):
+        ttl = PREFIXES + """
+        @prefix vcard: <http://www.w3.org/2006/vcard/ns#> .
+        <http://example.org/dataset> a dcat:Dataset ;
+            dcat:contactPoint [ a vcard:Kind ; vcard:hasEmail <mailto:support@example.org> ] .
+        """
+
+        (contact,) = parse(ttl)["contact"]
+
+        assert not contact["url"]
+
+    def test_a_schema_that_lists_the_urls_keeps_the_list(self):
+        (contact,) = parse(CONTACT_TTL, schema=LISTED_URLS_SCHEMA)["contact"]
+
+        assert contact["url"] == ["https://example.org/support"]
+
+    def test_one_url_is_serialized_once(self):
+        graph = serialize({"contact": [{"email": "a@example.org", "url": "https://example.org/a"}]})
+
+        assert contact_urls(graph) == [URIRef("https://example.org/a")]
+
+    def test_a_list_of_urls_is_written_as_the_first_one_with_a_warning(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            graph = serialize({"contact": [{"email": "a@example.org", "url": ["https://example.org/a", "https://example.org/b"]}]})
+
+        assert contact_urls(graph) == [URIRef("https://example.org/a")]
+        assert any("only the first is kept" in record.getMessage() for record in caplog.records)
+
+    def test_a_schema_that_lists_the_urls_writes_all_of_them(self):
+        graph = serialize(
+            {"contact": [{"email": "a@example.org", "url": ["https://example.org/a", "https://example.org/b"]}]},
+            schema=LISTED_URLS_SCHEMA,
+        )
+
+        assert len(contact_urls(graph)) == 2
+
+    def test_the_health_dcat_ap_profile_still_writes_every_url(self):
+        graph = serialize(
+            {"contact": [{"email": "a@example.org", "url": ["https://example.org/a", "https://example.org/b"]}]},
+            EuropeanHealthDCATAPProfile,
+        )
+
+        assert len(contact_urls(graph)) == 2
