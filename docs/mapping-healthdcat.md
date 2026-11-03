@@ -102,6 +102,14 @@ writes all of them. A schema that holds one value in them (`gdi_current` listed 
 first, with a warning. `identifier` stays single-valued (ADR 0001, Q3): the first value is kept and a
 warning logged.
 
+The same goes for the properties of a distribution that R8 gives `0..*`: the access URL
+(`resources[].access_url`, `dcat:accessURL`) and the download URL (`resources[].download_url`,
+`dcat:downloadURL`) are lists of IRIs, sorted when read, and `resources[].rights` (`dct:rights`) is a list of
+statements, each a `dct:RightsStatement` with an optional `uri` and a `label_translated` per language
+(`rdfs:label`). A statement that is a blank node has no `uri`. A schema that holds one value in the access URL or
+the download URL (the `gdi_current` one) keeps the first, with a warning, and one that holds the rights as
+text (a language map) is read and written as one text.
+
 ### Language-specific values
 
 Several values in the same language (two `dct:provenance` statements in English, say) are all kept by

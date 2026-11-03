@@ -1447,3 +1447,119 @@ class TestOpeningHours:
         again = _profile(graph).parse_dataset({"extras": []}, DATASET)
 
         assert again["hdab"][0]["opening_hours"] == hdab["opening_hours"]
+
+
+DISTRIBUTION_LISTS_TTL = PREFIXES + """
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+<http://example.org/dataset> a dcat:Dataset ; dcat:distribution <http://example.org/dist> .
+<http://example.org/dist> a dcat:Distribution ;
+    dcat:accessURL <http://example.org/access-b>, <http://example.org/access-a> ;
+    dcat:downloadURL <http://example.org/file-b>, <http://example.org/file-a> ;
+    dct:rights <http://example.org/rights-iri>,
+        [ a dct:RightsStatement ; rdfs:label "Approved researchers only"@en, "Alleen goedgekeurde onderzoekers"@nl ],
+        [ a dct:RightsStatement ; rdfs:label "No re-identification"@en ] .
+<http://example.org/rights-iri> a dct:RightsStatement ; rdfs:label "Licensed use"@en .
+"""
+
+
+def distribution_lists_schema():
+    """The R8 pack: the access and download URL of a distribution are lists, the rights a list of statements."""
+    return {
+        **SCHEMA,
+        "resource_fields": [
+            *SCHEMA["resource_fields"],
+            _field("access_url", **LISTED),
+            _field("download_url", **LISTED),
+            _field("rights", repeating_subfields=[_field("uri"), _field("label_translated")]),
+        ],
+    }
+
+
+class TestDistributionUrlsAndRightsAreLists:
+    """dcat:accessURL (1..*), dcat:downloadURL (0..*) and dct:rights (0..*) of a Distribution in R8."""
+
+    def test_every_access_and_download_url_is_parsed_sorted(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            (resource,) = parse(DISTRIBUTION_LISTS_TTL, schema=distribution_lists_schema())["resources"]
+
+        assert resource["access_url"] == ["http://example.org/access-a", "http://example.org/access-b"]
+        assert resource["download_url"] == ["http://example.org/file-a", "http://example.org/file-b"]
+        assert not [r for r in caplog.records if "only the first is kept" in r.getMessage()]
+
+    def test_every_rights_statement_is_kept_with_its_iri_and_its_languages(self):
+        (resource,) = parse(DISTRIBUTION_LISTS_TTL, schema=distribution_lists_schema())["resources"]
+
+        statements = resource["rights"]
+        assert len(statements) == 3
+        assert {"label_translated": {"en": "No re-identification"}} in statements
+        assert {"uri": "http://example.org/rights-iri", "label_translated": {"en": "Licensed use"}} in statements
+        assert {
+            "label_translated": {"en": "Approved researchers only", "nl": "Alleen goedgekeurde onderzoekers"}
+        } in statements
+
+    def test_a_distribution_without_them_gets_no_field(self):
+        ttl = POLICY_TTL % 'dct:title "d"'
+        schema = distribution_lists_schema()
+        (resource,) = parse(ttl.replace("dcat:accessURL <http://example.org/access> ;", ""), schema=schema)["resources"]
+
+        assert not {"access_url", "download_url", "rights"} & set(resource)
+
+    def test_a_schema_that_holds_one_value_keeps_the_first_with_a_warning(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            (resource,) = parse(DISTRIBUTION_LISTS_TTL)["resources"]
+
+        assert isinstance(resource["access_url"], str)
+        assert any("resources.access_url" in r.getMessage() for r in caplog.records)
+        assert any("resources.download_url" in r.getMessage() for r in caplog.records)
+
+    def test_every_value_is_written(self):
+        resource = {
+            "id": "r1",
+            "uri": str(DIST),
+            "access_url": ["http://example.org/access-a", "http://example.org/access-b"],
+            "download_url": ["http://example.org/file-a", "http://example.org/file-b"],
+            "rights": [
+                {"uri": "http://example.org/rights-iri", "label_translated": {"en": "Licensed use"}},
+                {"label_translated": {"en": "Approved researchers only", "nl": "Alleen goedgekeurde onderzoekers"}},
+            ],
+        }
+        graph = serialize({"resources": [resource]}, schema=distribution_lists_schema())
+
+        assert [str(v) for v in values(graph, DCAT.accessURL, DIST)] == [
+            "http://example.org/access-a",
+            "http://example.org/access-b",
+        ]
+        assert [str(v) for v in values(graph, DCAT.downloadURL, DIST)] == [
+            "http://example.org/file-a",
+            "http://example.org/file-b",
+        ]
+        rights = values(graph, DCT.rights, DIST)
+        assert len(rights) == 2
+        assert all((node, RDF.type, DCT.RightsStatement) in graph for node in rights)
+        labels = {str(label) for node in rights for label in graph.objects(node, RDFS.label)}
+        assert labels == {"Licensed use", "Approved researchers only", "Alleen goedgekeurde onderzoekers"}
+        assert (URIRef("http://example.org/rights-iri"), RDFS.label, Literal("Licensed use", lang="en")) in graph
+
+    def test_a_single_string_is_written_as_one_value(self):
+        resource = {"id": "r1", "uri": str(DIST), "access_url": "http://example.org/access-a"}
+        graph = serialize({"resources": [resource]}, schema=distribution_lists_schema())
+
+        assert [str(v) for v in values(graph, DCAT.accessURL, DIST)] == ["http://example.org/access-a"]
+
+    def test_a_schema_that_holds_one_value_still_writes_it(self):
+        resource = {"id": "r1", "uri": str(DIST), "access_url": "http://example.org/access-a", "rights": "Some rights"}
+        graph = serialize({"resources": [resource]})
+
+        assert [str(v) for v in values(graph, DCAT.accessURL, DIST)] == ["http://example.org/access-a"]
+        (statement,) = values(graph, DCT.rights, DIST)
+        assert str(next(graph.objects(statement, RDFS.label))) == "Some rights"
+
+    def test_it_round_trips(self):
+        schema = distribution_lists_schema()
+        dataset = parse(DISTRIBUTION_LISTS_TTL, schema=schema)
+        again = parse(serialize(dataset, schema=schema).serialize(format="turtle").replace(str(DATASET), str(DATASET)), schema=schema)
+
+        keys = ("access_url", "download_url")
+        assert {k: again["resources"][0][k] for k in keys} == {k: dataset["resources"][0][k] for k in keys}
+        sort = lambda statements: sorted(statements, key=lambda s: json.dumps(s, sort_keys=True))
+        assert sort(again["resources"][0]["rights"]) == sort(dataset["resources"][0]["rights"])

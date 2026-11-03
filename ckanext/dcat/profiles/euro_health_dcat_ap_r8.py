@@ -104,6 +104,13 @@ LISTABLE = (
     ("dcat_type", DCT.type),
 )
 
+# The same for these properties of a distribution (and for its rights, a list of statements with an
+# optional IRI and a label per language).
+LISTABLE_DISTRIBUTION = (
+    ("access_url", DCAT.accessURL),
+    ("download_url", DCAT.downloadURL),
+)
+
 BOOLEANS = {"true": True, "1": True, "false": False, "0": False}
 
 
@@ -147,6 +154,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
         self._read_the_listed_fields(dataset_dict, dataset_ref)
         self._warn_about_dropped_values_of_distributions(dataset_ref)
 
+        self._parse_distribution_lists(dataset_dict, dataset_ref)
         self._parse_access_service_documentation(dataset_dict)
         self._parse_has_policy(dataset_dict, dataset_ref)
         self._make_contact_urls_single(dataset_dict)
@@ -157,7 +165,10 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
 
     def graph_from_dataset(self, dataset_dict, dataset_ref):
         listed = {key: None for key, _ in LISTABLE if self._dataset_field_is_list(key)}
-        super().graph_from_dataset({**dataset_dict, **listed, "qualified_attribution": []}, dataset_ref)
+        resources = [self._resource_for_the_shared_writer(resource) for resource in dataset_dict.get("resources", [])]
+        super().graph_from_dataset(
+            {**dataset_dict, **listed, "qualified_attribution": [], "resources": resources}, dataset_ref
+        )
         self._add_qualified_attributions(dataset_ref, dataset_dict)
         self._add_the_listed_fields(dataset_ref, dataset_dict, listed)
 
@@ -507,6 +518,86 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
             if found and is_json:
                 resource_dict["access_services"] = json.dumps(services)
 
+    # --- access URL, download URL and rights of a distribution: 0..* ---------------------------
+
+    def _distribution_field_is_list(self, key):
+        """Whether the loaded schema holds several values in this resource field. A field it lacks holds one."""
+        field = self._schema_resource_field(key)
+        if not field:
+            return False
+        if key == "rights":
+            return bool(field.get("repeating_subfields"))
+        return self._is_listed(field)
+
+    def _resource_for_the_shared_writer(self, resource_dict):
+        """The shared writer writes one access URL and download URL and one rights statement; the others are added after it."""
+        resource_dict = dict(resource_dict)
+        for key, _ in LISTABLE_DISTRIBUTION:
+            if self._distribution_field_is_list(key):
+                resource_dict[key] = self._first_value(self._as_list(resource_dict.get(key)))
+        if self._distribution_field_is_list("rights"):
+            resource_dict["rights"] = None
+        return resource_dict
+
+    def _parse_distribution_lists(self, dataset_dict, dataset_ref):
+        for distribution_ref in self._distributions(dataset_ref):
+            for resource_dict in dataset_dict.get("resources", []):
+                if resource_dict.get("distribution_ref") != str(distribution_ref):
+                    continue
+                for key, predicate in LISTABLE_DISTRIBUTION:
+                    if not self._distribution_field_is_list(key):
+                        continue
+                    resource_dict.pop(key, None)
+                    values = sorted({text for text in self._object_value_list(distribution_ref, predicate) if text})
+                    if values:
+                        resource_dict[key] = values
+                if self._distribution_field_is_list("rights"):
+                    resource_dict.pop("rights", None)
+                    statements = self._rights_statements(distribution_ref)
+                    if statements:
+                        resource_dict["rights"] = statements
+
+    def _rights_statements(self, distribution_ref):
+        """Every ``dct:rights`` as an IRI (when it has one) and its label in each language, in a stable order."""
+        statements = []
+        for node in self.g.objects(distribution_ref, DCT.rights):
+            statement = {}
+            if isinstance(node, Literal):
+                statement["label_translated"] = {getattr(node, "language", None) or self._default_lang: str(node)}
+            else:
+                if isinstance(node, URIRef):
+                    statement["uri"] = str(node)
+                labels = self._translated(node, RDFS.label)
+                if labels:
+                    statement["label_translated"] = labels
+            if statement:
+                statements.append(statement)
+        return sorted(statements, key=lambda statement: json.dumps(statement, sort_keys=True))
+
+    def _add_distribution_lists(self, distribution_ref, resource_dict):
+        for key, predicate in LISTABLE_DISTRIBUTION:
+            if self._distribution_field_is_list(key):
+                for value in self._strings(resource_dict.get(key)):
+                    target = URIRef(value)
+                    self.g.add((distribution_ref, predicate, target))
+                    self.g.add((target, RDF.type, RDFS.Resource))
+        if not self._distribution_field_is_list("rights"):
+            return
+        for statement in self._as_list_of_dicts(resource_dict.get("rights")):
+            labels = statement.get("label_translated")
+            if isinstance(labels, str):
+                try:
+                    labels = json.loads(labels)
+                except ValueError:
+                    labels = {}
+            uri = statement.get("uri")
+            if not uri and not labels:
+                continue
+            node = URIRef(uri) if uri and IRI_SCHEME.match(uri) else BNode()
+            self.g.add((distribution_ref, DCT.rights, node))
+            self.g.add((node, RDF.type, DCT.RightsStatement))
+            self._add_translated(node, RDFS.label, labels)
+
     # --- the policy of a distribution ----------------------------------------------------
 
     def _parse_has_policy(self, dataset_dict, dataset_ref):
@@ -554,6 +645,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
     def _graph_from_resource(self, resource_dict):
         distribution_ref = CleanedURIRef(resource_uri(resource_dict))
         self._remove_distribution_retention_period(distribution_ref)
+        self._add_distribution_lists(distribution_ref, resource_dict)
         policy = self._first_value(resource_dict.get("has_policy"))
         if policy:
             if IRI_SCHEME.match(policy):
@@ -596,7 +688,8 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
                 (DCAT.downloadURL, "download_url"),
                 (DCT.rights, "rights"),
             ):
-                self._warn_about_dropped_values(distribution_ref, predicate, f"resources.{field}")
+                if not self._distribution_field_is_list(field):
+                    self._warn_about_dropped_values(distribution_ref, predicate, f"resources.{field}")
             for service_ref in self.g.objects(distribution_ref, DCAT.accessService):
                 for predicate, field in (
                     (DCT.title, "title"),
