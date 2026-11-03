@@ -112,6 +112,15 @@ LISTABLE_DISTRIBUTION = (
     ("download_url", DCAT.downloadURL),
 )
 
+# R8 gives the title (1..*), the description and the endpoint description (0..*) of a data service one
+# value per language: language maps when the loaded schema says so (the R8 pack), a single text otherwise.
+MULTILINGUAL_SERVICE_FIELDS = (
+    ("title", DCT.title),
+    ("description", DCT.description),
+    ("endpoint_description", DCAT.endpointDescription),
+)
+IRI_ONLY = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*://\S+$")
+
 BOOLEANS = {"true": True, "1": True, "false": False, "0": False}
 
 
@@ -157,7 +166,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
 
         self._parse_distribution_lists(dataset_dict, dataset_ref)
         self._parse_checksums(dataset_dict)
-        self._parse_access_service_documentation(dataset_dict)
+        self._parse_access_service_details(dataset_dict)
         self._parse_has_policy(dataset_dict, dataset_ref)
         self._make_contact_urls_single(dataset_dict)
         self._drop_what_the_schema_has_no_subfield_for(dataset_dict)
@@ -505,7 +514,18 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
             return BNode(service["access_service_ref"])
         return None
 
-    def _parse_access_service_documentation(self, dataset_dict):
+    def _service_field_is_multilingual(self, key):
+        """Whether the loaded schema holds a text per language in this subfield of a data service."""
+        field = next(
+            (f for f in (self._schema_resource_field("access_services") or {}).get("repeating_subfields", [])
+             if f.get("field_name") == key),
+            None,
+        )
+        return bool(field) and "fluent" in f"{field.get('preset', '')} {field.get('validators', '')}"
+
+    def _parse_access_service_details(self, dataset_dict):
+        """The documentation of a data service, and its title, description and endpoint description in every language."""
+        multilingual = [(key, predicate) for key, predicate in MULTILINGUAL_SERVICE_FIELDS if self._service_field_is_multilingual(key)]
         for resource_dict in dataset_dict.get("resources", []):
             services = resource_dict.get("access_services")
             is_json = isinstance(services, str)
@@ -513,9 +533,17 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
             found = False
             for service in services:
                 node = self._access_service_node(service)
-                documentation = self._object_value_list(node, FOAF.page) if node is not None else []
+                if node is None:
+                    continue
+                documentation = self._object_value_list(node, FOAF.page)
                 if documentation:
                     service["documentation"] = documentation
+                    found = True
+                for key, predicate in multilingual:
+                    service.pop(key, None)
+                    texts = self._translated(node, predicate)
+                    if texts:
+                        service[key] = texts
                     found = True
             if found and is_json:
                 resource_dict["access_services"] = json.dumps(services)
@@ -697,6 +725,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
                 continue
             for page in self._as_list(service.get("documentation")):
                 self.g.add((node, FOAF.page, URIRef(page)))
+            self._tidy_the_texts_of_a_service(node)
             for value in list(self.g.objects(node, DCT.accessRights)):
                 if isinstance(value, URIRef):
                     self.g.add((value, RDF.type, DCT.RightsStatement))
@@ -706,6 +735,20 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
                     self.g.add((node, DCT.accessRights, statement))
                     self.g.add((statement, RDF.type, DCT.RightsStatement))
                     self.g.add((statement, RDFS.label, value))
+
+    def _tidy_the_texts_of_a_service(self, node):
+        """A language left empty is not written, and an endpoint description that is an IRI stays an IRI."""
+        for _, predicate in MULTILINGUAL_SERVICE_FIELDS:
+            for value in list(self.g.objects(node, predicate)):
+                if not isinstance(value, Literal):
+                    continue
+                text = str(value).strip()
+                if not text:
+                    self.g.remove((node, predicate, value))
+                elif predicate == DCAT.endpointDescription and IRI_ONLY.match(text):
+                    self.g.remove((node, predicate, value))
+                    self.g.add((node, predicate, URIRef(text)))
+                    self.g.add((URIRef(text), RDF.type, RDFS.Resource))
 
     def _write_literals_as_nodes(self, subject, predicate, rdf_class):
         """R8 wants an IRI or a blank node for a format or media type, not the plain text CKAN keeps."""
@@ -727,12 +770,9 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
                 if not self._distribution_field_is_list(field):
                     self._warn_about_dropped_values(distribution_ref, predicate, f"resources.{field}")
             for service_ref in self.g.objects(distribution_ref, DCAT.accessService):
-                for predicate, field in (
-                    (DCT.title, "title"),
-                    (DCT.description, "description"),
-                    (DCAT.endpointDescription, "endpoint_description"),
-                ):
-                    self._warn_about_dropped_values(service_ref, predicate, f"access_services.{field}")
+                for key, predicate in MULTILINGUAL_SERVICE_FIELDS:
+                    if not self._service_field_is_multilingual(key):
+                        self._warn_about_dropped_values(service_ref, predicate, f"access_services.{key}")
         for relation_ref in self.g.objects(dataset_ref, DCAT.qualifiedRelation):
             for predicate, field in ((DCAT.hadRole, "role"), (DCT.relation, "relation")):
                 if not self._relationship_subfield_is_list(field):

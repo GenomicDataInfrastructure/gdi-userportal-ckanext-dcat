@@ -1643,3 +1643,99 @@ class TestChecksumEntity:
         again = parse(serialize(dataset, schema=schema).serialize(format="turtle"), schema=schema)
 
         assert again["resources"][0]["checksum"] == dataset["resources"][0]["checksum"]
+
+
+SERVICE_TTL = AGENT_PREFIXES + """
+<http://example.org/dataset> a dcat:Dataset ; dcat:distribution <http://example.org/dist> .
+<http://example.org/dist> a dcat:Distribution ; dcat:accessURL <http://example.org/file> ;
+    dcat:accessService <http://example.org/service> .
+<http://example.org/service> a dcat:DataService ;
+    dct:title "Query API"@en, "Bevragings-API"@nl ;
+    dct:description "Queries the cohort"@en, "Bevraagt het cohort"@nl ;
+    dcat:endpointDescription "How to call the endpoint"@en, <http://example.org/openapi.json> ;
+    dcat:endpointURL <http://example.org/endpoint> .
+"""
+
+
+def multilingual_service_schema():
+    """The R8 pack: the title, description and endpoint description of a data service hold a text per language."""
+    fluent = {"preset": "fluent_text"}
+    service = [_field("title", **fluent), _field("description", **fluent), _field("endpoint_description", **fluent)]
+    return {**SCHEMA, "resource_fields": [_field("access_services", repeating_subfields=service)]}
+
+
+def services_of(resource):
+    services = resource["access_services"]
+    return json.loads(services) if isinstance(services, str) else services
+
+
+class TestDataServiceTextsPerLanguage:
+    """dct:title (1..*), dct:description and dcat:endpointDescription (0..*) of a Data Service."""
+
+    def test_every_language_is_parsed(self):
+        (resource,) = parse(SERVICE_TTL, schema=multilingual_service_schema())["resources"]
+
+        (service,) = services_of(resource)
+        assert service["title"] == {"en": "Query API", "nl": "Bevragings-API"}
+        assert service["description"] == {"en": "Queries the cohort", "nl": "Bevraagt het cohort"}
+        # a text and an IRI without a language are both kept, in the default language
+        assert service["endpoint_description"] == {"en": "How to call the endpoint\n\nhttp://example.org/openapi.json"}
+
+    def test_a_service_without_them_has_no_such_keys(self):
+        ttl = SERVICE_TTL.replace('dct:title "Query API"@en, "Bevragings-API"@nl ;', "")
+        (resource,) = parse(ttl, schema=multilingual_service_schema())["resources"]
+
+        (service,) = services_of(resource)
+        assert "title" not in service
+
+    def test_a_schema_with_single_texts_keeps_the_first_with_a_warning(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            (resource,) = parse(SERVICE_TTL)["resources"]
+
+        (service,) = services_of(resource)
+        assert isinstance(service["title"], str)
+        assert any("access_services.title" in r.getMessage() for r in caplog.records)
+
+    def test_no_warning_when_the_texts_are_kept_per_language(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            parse(SERVICE_TTL, schema=multilingual_service_schema())
+
+        assert not [r for r in caplog.records if "only the first is kept" in r.getMessage()]
+
+    def _written(self, service):
+        resource = {"id": "r1", "uri": "http://example.org/dist", "access_services": [{"uri": "http://example.org/service", **service}]}
+        return serialize({"resources": [resource]}, schema=multilingual_service_schema())
+
+    def test_every_language_is_written_and_an_empty_one_is_not(self):
+        graph = self._written(
+            {"title": {"en": "Query API", "nl": "Bevragings-API", "de": ""}, "description": {"en": "Queries", "nl": ""}}
+        )
+        service = URIRef("http://example.org/service")
+
+        assert values(graph, DCT.title, service) == [Literal("Bevragings-API", lang="nl"), Literal("Query API", lang="en")]
+        assert values(graph, DCT.description, service) == [Literal("Queries", lang="en")]
+
+    def test_an_endpoint_description_that_is_an_iri_stays_an_iri(self):
+        graph = self._written({"endpoint_description": {"en": "http://example.org/openapi.json"}})
+
+        assert values(graph, DCAT.endpointDescription, URIRef("http://example.org/service")) == [
+            URIRef("http://example.org/openapi.json")
+        ]
+
+    def test_a_text_endpoint_description_keeps_its_language(self):
+        graph = self._written({"endpoint_description": {"en": "How to call it", "nl": "Zo roep je het aan"}})
+
+        assert values(graph, DCAT.endpointDescription, URIRef("http://example.org/service")) == [
+            Literal("How to call it", lang="en"),
+            Literal("Zo roep je het aan", lang="nl"),
+        ]
+
+    def test_it_round_trips(self):
+        schema = multilingual_service_schema()
+        (resource,) = parse(SERVICE_TTL, schema=schema)["resources"]
+        dataset = {"resources": [{"id": "r1", "uri": "http://example.org/dist", "access_services": services_of(resource)}]}
+        again = parse(serialize(dataset, schema=schema).serialize(format="turtle"), schema=schema)
+
+        (service,) = services_of(again["resources"][0])
+        assert service["title"] == {"en": "Query API", "nl": "Bevragings-API"}
+        assert service["description"] == {"en": "Queries the cohort", "nl": "Bevraagt het cohort"}

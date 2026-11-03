@@ -111,6 +111,16 @@ statements, each a `dct:RightsStatement` with an optional `uri` and a `label_tra
 the download URL (the `gdi_current` one) keeps the first, with a warning, and one that holds the rights as
 text (a language map) is read and written as one text.
 
+### Data service texts
+
+R8 gives the title (`1..*`), the description and the endpoint description (`0..*`) of a `dcat:DataService`, which
+is one text per language. With a schema whose subfields are multilingual (the R8 pack: `access_services[].title`,
+`description`, `endpoint_description` are language maps) the profile reads every language and writes each as a
+language-tagged literal; a language left empty is not written, and an endpoint description that is an IRI (a link to
+an OpenAPI document, say) is written as an IRI. Texts in the same language are joined, as for the other language
+maps; an IRI and a text in the same language are joined into one text, which is then no longer an IRI. A schema
+that holds one text (the `gdi_current` one) keeps the first, with a warning.
+
 ### Language-specific values
 
 Several values in the same language (two `dct:provenance` statements in English, say) are all kept by
