@@ -35,6 +35,7 @@ VCARD = Namespace("http://www.w3.org/2006/vcard/ns#")
 GEODCATAP = Namespace("http://data.europa.eu/930/")
 RDFS = Namespace("http://www.w3.org/2000/01/rdf-schema#")
 ODRL = Namespace("http://www.w3.org/ns/odrl/2/")
+PROV = Namespace("http://www.w3.org/ns/prov#")
 
 DATASET = URIRef("http://example.org/dataset")
 
@@ -79,6 +80,8 @@ SCHEMA = {
         _field("hdab_coordinator", repeating_subfields=_agent_subfields(*CONTACT_POINT)),
         _field("variables", repeating_subfields=[_field("title_translated"), _field("tables")]),
         _field("qualified_relation", repeating_subfields=[_field("uri"), _field("relation", **LISTED), _field("role", **LISTED)]),
+        _field("qualified_attribution", repeating_subfields=[_field("agent"), _field("role", **LISTED)]),
+        _field("provenance"),
     ],
     "resource_fields": [
         _field("access_services", repeating_subfields=[_field("title"), _field("documentation")]),
@@ -1174,3 +1177,113 @@ class TestQualifiedRelationCardinality:
         again = parse(serialize({"qualified_relation": [relation]}).serialize(format="turtle"))["qualified_relation"]
 
         assert again == [relation]
+
+
+ATTRIBUTION_TTL = PREFIXES + """
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+<http://example.org/dataset> a dcat:Dataset ;
+    prov:qualifiedAttribution [
+        a prov:Attribution ;
+        prov:agent <http://example.org/agent> ;
+        dcat:hadRole <http://example.org/role-b>, <http://example.org/role-a>
+    ] .
+<http://example.org/agent> a foaf:Agent ; foaf:name "Agent"@en .
+"""
+
+
+def single_role_schema():
+    plain = [_field("agent"), _field("role")]
+    return {
+        **SCHEMA,
+        "dataset_fields": [
+            _field("qualified_attribution", repeating_subfields=plain) if f["field_name"] == "qualified_attribution" else f
+            for f in SCHEMA["dataset_fields"]
+        ],
+    }
+
+
+class TestQualifiedAttributionRoles:
+    """prov:Attribution: dcat:hadRole is 1..n."""
+
+    def test_every_role_is_parsed_sorted(self):
+        (attribution,) = parse(ATTRIBUTION_TTL)["qualified_attribution"]
+
+        assert attribution["role"] == ["http://example.org/role-a", "http://example.org/role-b"]
+        assert attribution["agent"][0]["uri"] == "http://example.org/agent"
+
+    def test_a_schema_that_holds_one_role_gets_the_first_with_a_warning(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            (attribution,) = parse(ATTRIBUTION_TTL, schema=single_role_schema())["qualified_attribution"]
+
+        assert attribution["role"] == "http://example.org/role-a"
+        assert any("dcat:hadRole" in record.getMessage() for record in caplog.records)
+
+    def test_every_role_and_the_agent_are_written(self):
+        graph = serialize(
+            {
+                "qualified_attribution": [
+                    {
+                        "agent": [{"uri": "http://example.org/agent", "name": "Agent"}],
+                        "role": ["http://example.org/role-a", "http://example.org/role-b"],
+                    }
+                ]
+            }
+        )
+        (node,) = graph.objects(DATASET, PROV.qualifiedAttribution)
+
+        assert (node, RDF.type, PROV.Attribution) in graph
+        assert [str(v) for v in values(graph, DCAT.hadRole, node)] == ["http://example.org/role-a", "http://example.org/role-b"]
+        assert (URIRef("http://example.org/role-a"), RDF.type, DCAT.Role) in graph
+        assert (node, PROV.agent, URIRef("http://example.org/agent")) in graph
+
+    def test_a_single_role_string_is_written_as_one_role(self):
+        graph = serialize({"qualified_attribution": [{"agent": [], "role": "http://example.org/role-a"}]})
+        (node,) = graph.objects(DATASET, PROV.qualifiedAttribution)
+
+        assert len(values(graph, DCAT.hadRole, node)) == 1
+
+    def test_an_empty_attribution_is_not_written(self):
+        graph = serialize({"qualified_attribution": [{"agent": [], "role": []}]})
+
+        assert not list(graph.objects(DATASET, PROV.qualifiedAttribution))
+
+    def test_it_round_trips(self):
+        (attribution,) = parse(ATTRIBUTION_TTL)["qualified_attribution"]
+        again = parse(serialize({"qualified_attribution": [attribution]}).serialize(format="turtle"))["qualified_attribution"]
+
+        assert [a["role"] for a in again] == [attribution["role"]]
+
+
+class TestEveryValuePerLanguageIsKept:
+    """Values in the same language are all kept: with dct:provenance 1..n none may be lost."""
+
+    TTL = PREFIXES + """
+    @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+    <http://example.org/dataset> a dcat:Dataset ;
+        dct:provenance [ a dct:ProvenanceStatement ; rdfs:label "Second statement"@en ] ,
+                       [ a dct:ProvenanceStatement ; rdfs:label "First statement"@en ] ,
+                       [ a dct:ProvenanceStatement ; rdfs:label "Eerste verklaring"@nl ] .
+    """
+
+    def test_statements_in_one_language_are_all_kept_sorted(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            provenance = _multilingual(self.TTL, DCT.provenance)
+
+        assert provenance == {"en": "First statement\n\nSecond statement", "nl": "Eerste verklaring"}
+        assert any("they are joined" in record.getMessage() for record in caplog.records)
+
+    def test_one_value_per_language_is_unchanged_and_missing_form_languages_are_empty(self):
+        ttl = PREFIXES + '<http://example.org/dataset> a dcat:Dataset ; dct:title "Title"@en .'
+
+        assert _multilingual(ttl, DCT.title) == {"en": "Title", "nl": ""}
+
+    def test_a_value_without_a_language_is_in_the_default_language(self):
+        ttl = PREFIXES + '<http://example.org/dataset> a dcat:Dataset ; dct:title "Plain" .'
+
+        assert _multilingual(ttl, DCT.title)["en"] == "Plain"
+
+
+def _multilingual(turtle, predicate):
+    graph = Graph().parse(data=turtle, format="turtle")
+    return _profile(graph)._object_value_multilingual(DATASET, predicate)

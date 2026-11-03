@@ -148,7 +148,8 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
         return dataset_dict
 
     def graph_from_dataset(self, dataset_dict, dataset_ref):
-        super().graph_from_dataset(dataset_dict, dataset_ref)
+        super().graph_from_dataset({**dataset_dict, "qualified_attribution": []}, dataset_ref)
+        self._add_qualified_attributions(dataset_ref, dataset_dict)
 
         for prefix, namespace in namespaces.items():
             self.g.bind(prefix, namespace)
@@ -656,13 +657,85 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
     def _strings(self, value):
         return [str(item).strip() for item in self._as_list(value) if str(item).strip()]
 
+    # --- qualified attributions: an agent and one or more roles --------------------------
+
+    def _parse_qualified_attributions(self, dataset_ref):
+        attributions = []
+        for node in self.g.objects(dataset_ref, PROV.qualifiedAttribution):
+            roles = sorted({text for text in self._object_value_list(node, DCAT.hadRole) if text})
+            agents = self._agents_details(node, PROV.agent)
+            if not roles and not agents:
+                continue
+            if self._subfield_is_list("qualified_attribution", "role"):
+                role = roles
+            else:
+                role = roles[0] if roles else ""
+                if len(roles) > 1:
+                    log.warning(
+                        "%s has %d dcat:hadRole but qualified_attribution.role holds one; only the first is kept",
+                        node,
+                        len(roles),
+                    )
+            attributions.append({"role": role, "agent": agents})
+        return attributions
+
+    def _add_qualified_attributions(self, dataset_ref, dataset_dict):
+        """The shared writer takes one role per attribution; R8 allows one or more (dcat:hadRole)."""
+        for attribution in self._as_list_of_dicts(dataset_dict.get("qualified_attribution")):
+            roles = self._strings(attribution.get("role"))
+            agents = [a for a in self._as_list(attribution.get("agent")) if a]
+            if not roles and not agents:
+                continue
+            node = BNode()
+            self.g.add((dataset_ref, PROV.qualifiedAttribution, node))
+            self.g.add((node, RDF.type, PROV.Attribution))
+            for agent in agents:
+                if isinstance(agent, dict):
+                    self._add_agent_to_graph(node, PROV.agent, agent)
+                elif isinstance(agent, str):
+                    self.g.add((node, PROV.agent, CleanedURIRef(agent)))
+            for role in roles:
+                target = URIRefOrLiteral(role)
+                self.g.add((node, DCAT.hadRole, target))
+                if isinstance(target, URIRef):
+                    self.g.add((target, RDF.type, DCAT.Role))
+
+    # --- text per language: every value is kept --------------------------------------------
+
+    def _object_value_multilingual(self, subject, predicate):
+        """As the shared one, but values in the same language (two provenance statements, say) are all kept.
+
+        They are joined, sorted, with a blank line, instead of the last one winning.
+        """
+        found = {}
+        for value in self.g.objects(subject, predicate):
+            if isinstance(value, Literal):
+                texts = [value]
+            else:
+                texts = list(self.g.objects(value, RDFS.label)) or [value]
+            for text in texts:
+                lang = getattr(text, "language", None) or self._default_lang
+                found.setdefault(lang, set()).add(str(text))
+
+        out = {}
+        for lang, texts in found.items():
+            if len(texts) > 1:
+                log.warning("%s has %d values in language %r for %s; they are joined", subject, len(texts), lang, predicate)
+            out[lang] = "\n\n".join(sorted(texts))
+        for lang in self._form_languages or []:
+            out.setdefault(lang, "")
+        return out
+
     # --- qualified relations: role and relation are 1..n ---------------------------------
 
     RELATIONSHIP_SUBFIELDS = (("relation", DCT.relation, RDFS.Resource), ("role", DCAT.hadRole, DCAT.Role))
 
     def _relationship_subfield_is_list(self, subfield):
         """Whether the loaded schema holds several values in this subfield of qualified_relation (R8 does)."""
-        field = self._schema_field("qualified_relation")
+        return self._subfield_is_list("qualified_relation", subfield)
+
+    def _subfield_is_list(self, field_name, subfield):
+        field = self._schema_field(field_name)
         sub = next((f for f in (field or {}).get("repeating_subfields", []) if f["field_name"] == subfield), None)
         if sub is None:
             return True
