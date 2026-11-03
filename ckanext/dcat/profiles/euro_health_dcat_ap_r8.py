@@ -19,6 +19,7 @@ from ckanext.dcat.profiles.euro_health_dcat_ap import (
 log = logging.getLogger(__name__)
 
 IRI_SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
+HEX_BINARY = re.compile(r"^(?:[0-9a-fA-F]{2})+$")
 
 # Core Vocabularies (the CPSV-AP contact point R8 requires on every health agent)
 CV = Namespace("http://data.europa.eu/m8g/")
@@ -155,6 +156,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
         self._warn_about_dropped_values_of_distributions(dataset_ref)
 
         self._parse_distribution_lists(dataset_dict, dataset_ref)
+        self._parse_checksums(dataset_dict)
         self._parse_access_service_documentation(dataset_dict)
         self._parse_has_policy(dataset_dict, dataset_ref)
         self._make_contact_urls_single(dataset_dict)
@@ -520,6 +522,38 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
 
     # --- access URL, download URL and rights of a distribution: 0..* ---------------------------
 
+    # --- the checksum of a distribution: an entity with an algorithm and a value ---------------
+
+    def _checksum_is_an_entity(self):
+        """The R8 schema has a ``checksum`` entity; the gdi_current one has the plain fields ``hash`` and ``hash_algorithm``."""
+        return bool(self._schema_resource_field("checksum"))
+
+    def _parse_checksums(self, dataset_dict):
+        """``spdx:Checksum`` (0..1): the algorithm (an SPDX member) and the value (``xsd:hexBinary``), kept in ``checksum``."""
+        if not self._checksum_is_an_entity():
+            return
+        for resource_dict in dataset_dict.get("resources", []):
+            algorithm = str(resource_dict.pop("hash_algorithm", "") or "")
+            value = str(resource_dict.pop("hash", "") or "").strip()
+            if value and not HEX_BINARY.match(value):
+                log.warning("the checksum value %r of %s is not hexadecimal; it is not kept", value, resource_dict.get("uri"))
+                value = ""
+            checksum = {}
+            self._put(checksum, "algorithm", algorithm)
+            self._put(checksum, "checksum_value", value.lower())
+            if checksum:
+                resource_dict["checksum"] = [checksum]
+
+    def _checksum_for_the_shared_writer(self, resource_dict):
+        """The shared writer writes ``hash`` and ``hash_algorithm`` as an ``spdx:Checksum``; the value is lower case."""
+        (checksum, *_) = self._as_list_of_dicts(resource_dict.get("checksum")) or [{}]
+        value = str(checksum.get("checksum_value") or "").strip()
+        if value and not HEX_BINARY.match(value):
+            log.warning("the checksum value %r of %s is not hexadecimal; it is not written", value, resource_dict.get("uri"))
+            value = ""
+        resource_dict["hash"] = value.lower()
+        resource_dict["hash_algorithm"] = checksum.get("algorithm") or ""
+
     def _distribution_field_is_list(self, key):
         """Whether the loaded schema holds several values in this resource field. A field it lacks holds one."""
         field = self._schema_resource_field(key)
@@ -537,6 +571,8 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
                 resource_dict[key] = self._first_value(self._as_list(resource_dict.get(key)))
         if self._distribution_field_is_list("rights"):
             resource_dict["rights"] = None
+        if self._checksum_is_an_entity():
+            self._checksum_for_the_shared_writer(resource_dict)
         return resource_dict
 
     def _parse_distribution_lists(self, dataset_dict, dataset_ref):

@@ -1563,3 +1563,83 @@ class TestDistributionUrlsAndRightsAreLists:
         assert {k: again["resources"][0][k] for k in keys} == {k: dataset["resources"][0][k] for k in keys}
         sort = lambda statements: sorted(statements, key=lambda s: json.dumps(s, sort_keys=True))
         assert sort(again["resources"][0]["rights"]) == sort(dataset["resources"][0]["rights"])
+
+
+SPDX = Namespace("http://spdx.org/rdf/terms#")
+SHA256 = URIRef("http://spdx.org/rdf/terms#checksumAlgorithm_sha256")
+
+CHECKSUM_TTL = POLICY_TTL % """dcat:byteSize "10"^^xsd:nonNegativeInteger ;
+    spdx:checksum [ a spdx:Checksum ; spdx:algorithm spdx:checksumAlgorithm_sha256 ; spdx:checksumValue "ABC123"^^xsd:hexBinary ]"""
+CHECKSUM_TTL = CHECKSUM_TTL.replace("@prefix odrl", "@prefix spdx: <http://spdx.org/rdf/terms#> .\n@prefix odrl", 1)
+
+
+def checksum_schema():
+    """The R8 pack: the checksum of a distribution is an entity with an algorithm and a value, not two plain fields."""
+    return {
+        **SCHEMA,
+        "resource_fields": [
+            *SCHEMA["resource_fields"],
+            _field(
+                "checksum",
+                repeating_once=True,
+                repeating_subfields=[_field("algorithm"), _field("checksum_value")],
+            ),
+        ],
+    }
+
+
+class TestChecksumEntity:
+    """spdx:Checksum (0..1) of a Distribution: an algorithm (1) and a checksum value (1, lower case xsd:hexBinary)."""
+
+    def test_the_checksum_is_parsed_into_the_entity_with_a_lower_case_value(self):
+        (resource,) = parse(CHECKSUM_TTL, schema=checksum_schema())["resources"]
+
+        assert resource["checksum"] == [{"algorithm": str(SHA256), "checksum_value": "abc123"}]
+        assert "hash" not in resource and "hash_algorithm" not in resource
+
+    def test_a_schema_with_the_plain_fields_keeps_them(self):
+        (resource,) = parse(CHECKSUM_TTL)["resources"]
+
+        assert resource["hash_algorithm"] == str(SHA256)
+        assert "checksum" not in resource
+
+    def test_a_distribution_without_a_checksum_has_no_field(self):
+        (resource,) = parse(POLICY_TTL % 'dct:title "d"', schema=checksum_schema())["resources"]
+
+        assert not {"checksum", "hash", "hash_algorithm"} & set(resource)
+
+    def test_a_value_that_is_not_hexadecimal_is_dropped_with_a_warning(self, caplog):
+        ttl = CHECKSUM_TTL.replace('"ABC123"^^xsd:hexBinary', '"not hex"')
+        with caplog.at_level(logging.WARNING):
+            (resource,) = parse(ttl, schema=checksum_schema())["resources"]
+
+        assert resource["checksum"] == [{"algorithm": str(SHA256)}]
+        assert any("not hexadecimal" in record.getMessage() for record in caplog.records)
+
+    def test_the_entity_is_written_as_an_spdx_checksum_with_a_lower_case_hex_binary(self):
+        resource = {
+            "id": "r1",
+            "uri": str(DIST),
+            "checksum": [{"algorithm": str(SHA256), "checksum_value": "ABC123"}],
+        }
+        graph = serialize({"resources": [resource]}, schema=checksum_schema())
+
+        (checksum,) = values(graph, SPDX.checksum, DIST)
+        assert (checksum, RDF.type, SPDX.Checksum) in graph
+        assert list(graph.objects(checksum, SPDX.algorithm)) == [SHA256]
+        assert list(graph.objects(checksum, SPDX.checksumValue)) == [Literal("abc123", datatype=XSD.hexBinary)]
+
+    def test_a_value_that_is_not_hexadecimal_is_not_written(self, caplog):
+        resource = {"id": "r1", "uri": str(DIST), "checksum": [{"algorithm": str(SHA256), "checksum_value": "zz"}]}
+        with caplog.at_level(logging.WARNING):
+            graph = serialize({"resources": [resource]}, schema=checksum_schema())
+
+        assert values(graph, SPDX.checksum, DIST) == []
+        assert any("not hexadecimal" in record.getMessage() for record in caplog.records)
+
+    def test_it_round_trips(self):
+        schema = checksum_schema()
+        dataset = parse(CHECKSUM_TTL, schema=schema)
+        again = parse(serialize(dataset, schema=schema).serialize(format="turtle"), schema=schema)
+
+        assert again["resources"][0]["checksum"] == dataset["resources"][0]["checksum"]
