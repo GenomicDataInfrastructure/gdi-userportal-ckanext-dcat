@@ -351,7 +351,7 @@ class TestHealthAgents:
         assert hdab["opening_hours"] == [
             {
                 "description_translated": {"en": "Weekdays 08:30-16:30"},
-                "frequency": "http://publications.europa.eu/resource/authority/frequency/DAILY",
+                "frequency": ["http://publications.europa.eu/resource/authority/frequency/DAILY"],
             }
         ]
         assert hdab["special_opening_hours"] == [{"description_translated": {"en": "Closed on holidays"}}]
@@ -394,7 +394,7 @@ class TestHealthAgents:
         "opening_hours": [
             {
                 "description_translated": {"en": "Weekdays 08:30-16:30"},
-                "frequency": "http://publications.europa.eu/resource/authority/frequency/DAILY",
+                "frequency": ["http://publications.europa.eu/resource/authority/frequency/DAILY"],
             }
         ],
         "special_opening_hours": [{"description_translated": {"en": "Closed on holidays"}}],
@@ -1355,3 +1355,95 @@ class TestLandingPageAndTypeAreLists:
         again = parse(serialize(dataset, schema=listed_schema()).serialize(format="turtle"), schema=listed_schema())
 
         assert (again["url"], again["dcat_type"]) == (dataset["url"], dataset["dcat_type"])
+
+
+HOURS_TTL = AGENT_PREFIXES + """
+<http://example.org/dataset> a dcat:Dataset ; healthdcatap:hdab <http://example.org/hdab> .
+<http://example.org/hdab> a foaf:Agent ; foaf:name "HDAB"@en ;
+    cv:contactPoint [
+        a cv:ContactPoint ; cv:email "hdab@example.org" ;
+        cv:openingHours [
+            a time:TemporalEntity ;
+            dct:description "Weekdays 08:30-16:30"@en, "Werkdagen 08:30-16:30"@nl ;
+            cv:frequency <http://publications.europa.eu/resource/authority/frequency/WEEKLY>,
+                         <http://publications.europa.eu/resource/authority/frequency/DAILY>
+        ]
+    ] .
+"""
+
+
+def single_frequency_schema():
+    """Opening hours whose frequency holds one value."""
+    hours = _field("opening_hours", repeating_subfields=[_field("description_translated"), _field("frequency")])
+    plain = [hours if f["field_name"] == "opening_hours" else f for f in _agent_subfields(*CONTACT_POINT)]
+    return {
+        **SCHEMA,
+        "dataset_fields": [
+            _field(f["field_name"], repeating_subfields=plain) if f["field_name"] in ("hdab", "publisher") else f
+            for f in SCHEMA["dataset_fields"]
+        ],
+    }
+
+
+class TestOpeningHours:
+    """time:TemporalEntity: dct:description in every language and one or more cv:frequency."""
+
+    DAILY = "http://publications.europa.eu/resource/authority/frequency/DAILY"
+    WEEKLY = "http://publications.europa.eu/resource/authority/frequency/WEEKLY"
+
+    def test_the_description_is_kept_in_every_language_and_every_frequency_is_read_sorted(self):
+        (hdab,) = parse(HOURS_TTL)["hdab"]
+
+        assert hdab["opening_hours"] == [
+            {
+                "description_translated": {"en": "Weekdays 08:30-16:30", "nl": "Werkdagen 08:30-16:30"},
+                "frequency": [self.DAILY, self.WEEKLY],
+            }
+        ]
+
+    def test_a_schema_that_holds_one_frequency_gets_the_first_with_a_warning(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            (hdab,) = parse(HOURS_TTL, schema=single_frequency_schema())["hdab"]
+
+        assert hdab["opening_hours"][0]["frequency"] == self.DAILY
+        assert any("cv:frequency" in record.getMessage() for record in caplog.records)
+
+    def test_every_description_and_frequency_is_written(self):
+        graph = serialize(
+            {
+                "hdab": [
+                    {
+                        "name": "HDAB",
+                        "email": ["hdab@example.org"],
+                        "opening_hours": [
+                            {
+                                "description_translated": {"en": "Weekdays", "nl": "Werkdagen", "fr": ""},
+                                "frequency": [self.DAILY, self.WEEKLY],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+        (agent,) = values(graph, HEALTHDCATAP.hdab)
+        (contact_point,) = values(graph, CV.contactPoint, agent)
+        (hours,) = values(graph, CV.openingHours, contact_point)
+
+        assert values(graph, DCT.description, hours) == [Literal("Weekdays", lang="en"), Literal("Werkdagen", lang="nl")]
+        assert [str(v) for v in values(graph, CV.frequency, hours)] == [self.DAILY, self.WEEKLY]
+        assert (URIRef(self.WEEKLY), RDF.type, DCT.Frequency) in graph
+
+    def test_a_single_frequency_string_is_written_as_one_frequency(self):
+        graph = serialize({"hdab": [{"name": "HDAB", "email": ["a@example.org"], "special_opening_hours": [{"frequency": self.DAILY}]}]})
+        (agent,) = values(graph, HEALTHDCATAP.hdab)
+        (contact_point,) = values(graph, CV.contactPoint, agent)
+        (special,) = values(graph, CV.specialOpeningHoursSpecification, contact_point)
+
+        assert [str(v) for v in values(graph, CV.frequency, special)] == [self.DAILY]
+
+    def test_it_round_trips(self):
+        (hdab,) = parse(HOURS_TTL)["hdab"]
+        graph = serialize({"hdab": [hdab]})
+        again = _profile(graph).parse_dataset({"extras": []}, DATASET)
+
+        assert again["hdab"][0]["opening_hours"] == hdab["opening_hours"]

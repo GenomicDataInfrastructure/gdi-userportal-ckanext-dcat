@@ -65,7 +65,8 @@ Fields only R8 has (`healthdcat_r8` pack):
   publisher note and type as `healthdcatap:publisherNote` and `healthdcatap:publisherType`.
 - **`euro_health_dcat_ap_r8`**: every health agent has one `cv:ContactPoint` holding the email
   (`cv:email`), the contact page (`cv:contactPage`), the telephone (`cv:telephone`) and the opening
-  hours (`cv:openingHours`, `cv:specialOpeningHoursSpecification`, as `time:TemporalEntity`). The
+  hours (`cv:openingHours`, `cv:specialOpeningHoursSpecification`, as `time:TemporalEntity`, each
+  with a `dct:description` in every language and one or more `cv:frequency`, a list). The
   publisher note is written as `dct:description`. The email, the contact page and the telephone are
   `0..n` on a contact point, so `email`, `url` and `telephone` are lists and every value is read and
   written (sorted, so a re-parse is stable). The flat terms of the other profile are still read, for

@@ -306,7 +306,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
             ("opening_hours", CV.openingHours),
             ("special_opening_hours", CV.specialOpeningHoursSpecification),
         ):
-            hours = self._temporal_entities(contact_point, predicate)
+            hours = self._temporal_entities(contact_point, predicate, self._frequency_is_list(key))
             if hours:
                 agent[key] = hours
 
@@ -365,7 +365,8 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
 
     # --- opening hours -------------------------------------------------------------------
 
-    def _temporal_entities(self, subject, predicate):
+    def _temporal_entities(self, subject, predicate, frequencies_are_a_list=True):
+        """time:TemporalEntity: a description per language (dct:description) and one or more cv:frequency."""
         entities = []
         for node in self.g.objects(subject, predicate):
             entity = {}
@@ -376,18 +377,39 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
             }
             if descriptions:
                 entity["description_translated"] = descriptions
-            frequency = self._first(node, CV.frequency)
-            if frequency:
-                entity["frequency"] = frequency
+            frequencies = sorted({str(value) for value in self.g.objects(node, CV.frequency)})
+            if frequencies and frequencies_are_a_list:
+                entity["frequency"] = frequencies
+            elif frequencies:
+                entity["frequency"] = frequencies[0]
+                if len(frequencies) > 1:
+                    log.warning(
+                        "%s has %d cv:frequency but the loaded schema holds one; only the first is kept",
+                        node,
+                        len(frequencies),
+                    )
             if entity:
                 entities.append(entity)
         return entities
 
+    def _frequency_is_list(self, hours_key):
+        """Whether the loaded schema holds several frequencies in the (special) opening hours of an agent."""
+        agents = self._schema_field("publisher")
+        hours = next((f for f in (agents or {}).get("repeating_subfields", []) if f["field_name"] == hours_key), None)
+        frequency = next(
+            (f for f in (hours or {}).get("repeating_subfields", []) if f["field_name"] == "frequency"), None
+        )
+        return frequency is None or self._is_listed(frequency)
+
+    @staticmethod
+    def _is_listed(field):
+        return field.get("preset") == "multiple_text" or "scheming_multiple_text" in str(field.get("validators", ""))
+
     def _add_temporal_entities(self, subject, predicate, entities):
         for entity in entities:
             descriptions = entity.get("description_translated")
-            frequency = self._first_value(entity.get("frequency"))
-            if not (descriptions or frequency):
+            frequencies = self._strings(entity.get("frequency"))
+            if not (descriptions or frequencies):
                 continue
             node = BNode()
             self.g.add((subject, predicate, node))
@@ -395,9 +417,10 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
             for lang, text in (descriptions or {}).items():
                 if text:
                     self.g.add((node, DCT.description, Literal(text, lang=lang or None)))
-            if frequency:
-                self.g.add((node, CV.frequency, URIRef(frequency)))
-                self.g.add((URIRef(frequency), RDF.type, DCT.Frequency))
+            for frequency in frequencies:
+                target = CleanedURIRef(frequency)
+                self.g.add((node, CV.frequency, target))
+                self.g.add((target, RDF.type, DCT.Frequency))
 
     # --- variables: a CSVW table group, tables and columns -------------------------------
 
@@ -781,7 +804,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
         sub = next((f for f in (field or {}).get("repeating_subfields", []) if f["field_name"] == subfield), None)
         if sub is None:
             return True
-        return sub.get("preset") == "multiple_text" or "scheming_multiple_text" in str(sub.get("validators", ""))
+        return self._is_listed(sub)
 
     def _relationship_details(self, subject, predicate):
         """A dcat:Relationship has one or more dct:relation and dcat:hadRole in R8.
