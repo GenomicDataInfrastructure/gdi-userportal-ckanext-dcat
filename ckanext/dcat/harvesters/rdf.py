@@ -15,6 +15,11 @@ from ckanext.harvest.model import HarvestObject, HarvestObjectExtra
 from ckanext.harvest.logic.schema import unicode_safe
 from ckanext.dcat.harvesters.base import DCATHarvester
 from ckanext.dcat.harvesters.invalid_values import call_dropping_invalid_values
+from ckanext.dcat.metadata_profiles import (
+    MetadataProfileError,
+    installed_rdf_profiles,
+    resolve_source_profile,
+)
 from ckanext.dcat.processors import RDFParserException, RDFParser
 from ckanext.dcat.interfaces import IDCATRDFHarvester
 
@@ -143,7 +148,27 @@ class DCATRDFHarvester(DCATHarvester):
             if rdf_format not in supported_formats:
                 raise ValueError('rdf_format should be one of: ' + ", ".join(supported_formats))
 
+        # 'metadata_profile' (a profile pack) or 'profile' (a raw RDF profile chain), not both
+        try:
+            resolve_source_profile(source_config_obj, p.toolkit.config, installed_rdf_profiles())
+        except MetadataProfileError as e:
+            raise ValueError(str(e))
+
         return source_config
+
+    def _source_rdf_profiles(self, harvest_job):
+        '''
+        The RDF profile chain the source is parsed with: the one of its 'metadata_profile' (or its raw
+        'profile' chain), else the one of the deployment's main profile.
+
+        Raises MetadataProfileError, with no fallback to the main profile: that would change the shape
+        of the data unnoticed.
+        '''
+        source_config = json.loads(harvest_job.source.config) if harvest_job.source.config else {}
+        resolved = resolve_source_profile(source_config, p.toolkit.config)
+        log.info('Harvest source %s is parsed with metadata profile %s (RDF profiles: %s)',
+                 harvest_job.source.id, resolved.name or '-', ' '.join(resolved.rdf_profiles))
+        return resolved.rdf_profiles
 
     def gather_stage(self, harvest_job):
 
@@ -152,6 +177,15 @@ class DCATRDFHarvester(DCATHarvester):
         rdf_format = None
         if harvest_job.source.config:
             rdf_format = json.loads(harvest_job.source.config).get("rdf_format")
+
+        try:
+            rdf_profiles = self._source_rdf_profiles(harvest_job)
+        except MetadataProfileError as e:
+            # A raise here would crash the consumer, so report it on the job and harvest nothing
+            self._save_gather_error(
+                'Harvest source %s: %s' % (harvest_job.source.id, e), harvest_job
+            )
+            return []
 
         # Get file contents of first page
         next_page_url = harvest_job.source.url
@@ -197,8 +231,7 @@ class DCATRDFHarvester(DCATHarvester):
             if not content:
                 return []
 
-            # TODO: profiles conf
-            parser = RDFParser()
+            parser = RDFParser(profiles=rdf_profiles or None)
 
             try:
                 parser.parse(content, _format=rdf_format)
