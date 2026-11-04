@@ -94,7 +94,7 @@ class EuropeanHealthDCATAPProfile(EuropeanDCATAP3Profile):
             ("number_of_records", HEALTHDCATAP.numberOfRecords),
             ("number_of_unique_individuals", HEALTHDCATAP.numberOfUniqueIndividuals),
         ):
-            value = self._object_value_int(dataset_ref, predicate)
+            value = self._object_value_int_or_raw(dataset_ref, predicate)
             # A zero value evaluates as False but is definitely not a None
             if value is not None:
                 dataset_dict[key] = value

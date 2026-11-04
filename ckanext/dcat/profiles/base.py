@@ -333,6 +333,23 @@ class RDFProfile(object):
                 pass
         return None
 
+    def _object_value_int_or_raw(self, subject, predicate):
+        """
+        Like ``_object_value_int``, but a value that is not a number is returned as it is
+        instead of being lost.
+
+        The schema then rejects it ("Invalid integer") and a harvester that imports the dataset
+        without the invalid value (ckanext.dcat.harvesters.invalid_values) reports which value was
+        left out. Returns None when there is no value.
+        """
+        object_value = self._object_value(subject, predicate)
+        if not object_value:
+            return None
+        try:
+            return int(float(object_value))
+        except (ValueError, OverflowError):
+            return object_value
+
     def _object_value_int_list(self, subject, predicate):
         """
         Given a subject and a predicate, returns the value of the object as a
