@@ -219,24 +219,21 @@ class DCATRDFHarvester(DCATHarvester):
 
                 source_dataset = model.Package.get(harvest_job.source.id)
 
-                series_ids, page_series_mapping = self._parse_and_collect(
+                object_ids += self._parse_and_collect(
                     parser.dataset_series(),
                     source_dataset,
                     harvest_job,
                     guids_in_source,
                     is_series=True,
-                    collect_series_mapping=True
+                    series_mapping=series_mapping
                 )
-                object_ids += series_ids
-                series_mapping.update(page_series_mapping)
 
                 object_ids += self._parse_and_collect(
                     parser.datasets(series_mapping),
                     source_dataset,
                     harvest_job,
                     guids_in_source,
-                    is_series=False,
-                    collect_series_mapping=False
+                    is_series=False
                 )
             except Exception as e:
                 self._save_gather_error('Error when processsing dataset: %r / %s' % (e, traceback.format_exc()),
@@ -333,6 +330,25 @@ class DCATRDFHarvester(DCATHarvester):
 
         import_warning = None
 
+        def save_reference(defer_constraints=False):
+            # Save reference to the package on the object
+            harvest_object.package_id = dataset['id']
+            harvest_object.add()
+
+            if defer_constraints:
+                # Defer constraints and flush so the dataset can be indexed with
+                # the harvest object id (on the after_show hook from the harvester
+                # plugin)
+                model.Session.execute(
+                    sa.text('SET CONSTRAINTS harvest_object_package_id_fkey DEFERRED')
+                )
+                model.Session.flush()
+
+        def redo_bookkeeping(defer_constraints=False):
+            # CKAN rolls back when validation fails: that undoes the flags and the reference too
+            flag_current()
+            save_reference(defer_constraints)
+
         try:
             package_plugin = lib_plugins.lookup_package_plugin(dataset.get('type', None))
             if existing_dataset:
@@ -360,17 +376,7 @@ class DCATRDFHarvester(DCATHarvester):
 
                 try:
                     if dataset:
-                        def save_reference():
-                            # Save reference to the package on the object
-                            harvest_object.package_id = dataset['id']
-                            harvest_object.add()
-
                         save_reference()
-
-                        def redo_bookkeeping():
-                            # CKAN rolls back when validation fails: that undoes the flags above too
-                            flag_current()
-                            save_reference()
 
                         _, warning = call_dropping_invalid_values(
                             p.toolkit.get_action('package_update'), context, dataset, before_retry=redo_bookkeeping
@@ -400,7 +406,7 @@ class DCATRDFHarvester(DCATHarvester):
 
                 # We need to explicitly provide a package ID. A dataset series keeps the one it got
                 # when it was gathered: the datasets of this harvest point at it.
-                if not (dataset.get('type') == 'dataset_series' and dataset.get('id')):
+                if not (is_series and dataset.get('id')):
                     dataset['id'] = str(uuid.uuid4())
                 package_schema['id'] = [unicode_safe]
 
@@ -412,28 +418,13 @@ class DCATRDFHarvester(DCATHarvester):
 
                 try:
                     if dataset:
-                        def save_reference():
-                            # Save reference to the package on the object
-                            harvest_object.package_id = dataset['id']
-                            harvest_object.add()
-
-                            # Defer constraints and flush so the dataset can be indexed with
-                            # the harvest object id (on the after_show hook from the harvester
-                            # plugin)
-                            model.Session.execute(
-                                sa.text('SET CONSTRAINTS harvest_object_package_id_fkey DEFERRED')
-                            )
-                            model.Session.flush()
-
-                        save_reference()
-
-                        def redo_bookkeeping():
-                            # CKAN rolls back when validation fails: that undoes the flags above too
-                            flag_current()
-                            save_reference()
+                        save_reference(defer_constraints=True)
 
                         _, warning = call_dropping_invalid_values(
-                            p.toolkit.get_action('package_create'), context, dataset, before_retry=redo_bookkeeping
+                            p.toolkit.get_action('package_create'),
+                            context,
+                            dataset,
+                            before_retry=lambda: redo_bookkeeping(defer_constraints=True)
                         )
                         import_warning = warning
                     else:
@@ -490,11 +481,11 @@ class DCATRDFHarvester(DCATHarvester):
         harvest_job,
         guids_in_source,
         is_series=False,
-        collect_series_mapping=False
+        series_mapping=None
     ):
+        # series_mapping, when given, is filled with the RDF URI -> id and name of each item
         object_ids = []
         label = "dataset series" if is_series else "dataset"
-        series_mapping = {} if collect_series_mapping else None
 
         for item in items:
             original_title = item.get("title", label)
@@ -520,27 +511,24 @@ class DCATRDFHarvester(DCATHarvester):
 
             # Store the RDF URI -> id/name mapping before the object is saved, so a new series already
             # has its id when the datasets of this harvest point at it.
-            if collect_series_mapping:
+            if series_mapping is not None:
                 series_uri = item.get("uri") or item.get("identifier")
                 if series_uri:
-                    # Try to find an existing active dataset series by 'guid' match
+                    # Try to find an existing active dataset series of this source
                     existing = self._find_existing_series(series_uri, harvest_job.source.id)
 
                     if existing:
                         item["name"] = existing.name
-                    elif not item.get("id"):
-                        item["id"] = str(uuid.uuid4())
+                    else:
+                        item.setdefault("id", str(uuid.uuid4()))
 
                     series_mapping[str(series_uri)] = {
-                        "id": existing.id if existing else item.get("id"),
+                        "id": existing.id if existing else item["id"],
                         "name": item["name"]
                     }
 
             obj = HarvestObject(guid=guid, job=harvest_job, content=json.dumps(item))
             obj.save()
             object_ids.append(obj.id)
-
-        if collect_series_mapping:
-            return object_ids, series_mapping
 
         return object_ids
