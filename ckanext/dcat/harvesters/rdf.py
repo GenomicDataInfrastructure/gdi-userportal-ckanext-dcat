@@ -158,6 +158,9 @@ class DCATRDFHarvester(DCATHarvester):
         object_ids = []
         last_content_hash = None
         self._names_taken = []
+        # RDF URI of a dataset series -> its id and name. It is kept over the pages of a paged source,
+        # so a dataset on a later page can point at a series on an earlier page.
+        series_mapping = {}
 
         while next_page_url:
             for harvester in p.PluginImplementations(IDCATRDFHarvester):
@@ -214,7 +217,7 @@ class DCATRDFHarvester(DCATHarvester):
 
                 source_dataset = model.Package.get(harvest_job.source.id)
 
-                series_ids, series_mapping = self._parse_and_collect(
+                series_ids, page_series_mapping = self._parse_and_collect(
                     parser.dataset_series(),
                     source_dataset,
                     harvest_job,
@@ -223,6 +226,7 @@ class DCATRDFHarvester(DCATHarvester):
                     collect_series_mapping=True
                 )
                 object_ids += series_ids
+                series_mapping.update(page_series_mapping)
 
                 object_ids += self._parse_and_collect(
                     parser.datasets(series_mapping),
@@ -444,6 +448,18 @@ class DCATRDFHarvester(DCATHarvester):
 
         return True
 
+    def _find_existing_series(self, series_uri):
+        '''
+        The active dataset series whose 'guid' is the given RDF URI, from any harvest source, or None.
+        '''
+        return model.Session.query(model.Package).\
+            join(model.PackageExtra).\
+            filter(model.PackageExtra.key == 'guid').\
+            filter(model.PackageExtra.value == str(series_uri)).\
+            filter(model.Package.type == 'dataset_series').\
+            filter(model.Package.state == 'active').\
+            first()
+
     def _parse_and_collect(
         self,
         items,
@@ -485,13 +501,7 @@ class DCATRDFHarvester(DCATHarvester):
                 series_uri = item.get("uri") or item.get("identifier")
                 if series_uri:
                     # Try to find an existing active dataset series by 'guid' match
-                    existing = model.Session.query(model.Package).\
-                        join(model.PackageExtra).\
-                        filter(model.PackageExtra.key == 'guid').\
-                        filter(model.PackageExtra.value == series_uri).\
-                        filter(model.Package.type == 'dataset_series').\
-                        filter(model.Package.state == 'active').\
-                        first()
+                    existing = self._find_existing_series(series_uri)
 
                     if existing:
                         item["name"] = existing.name
