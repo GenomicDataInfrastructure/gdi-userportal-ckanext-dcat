@@ -321,16 +321,12 @@ class DCATRDFHarvester(DCATHarvester):
         is_series = dataset.get('type') == 'dataset_series'
 
         def flag_current():
-            # Get the last harvested object (if any)
-            previous_objects = model.Session.query(HarvestObject) \
-                                            .filter(HarvestObject.guid==harvest_object.guid) \
-                                            .filter(HarvestObject.current==True)
-            if is_series:
-                # a series is not shared between sources: only the one of this source is replaced
-                previous_objects = previous_objects.filter(
-                    HarvestObject.harvest_source_id == harvest_object.harvest_source_id
-                )
-            previous_object = previous_objects.first()
+            # Only this source's object is replaced: another source can hold the same guid
+            previous_object = model.Session.query(HarvestObject) \
+                                           .filter(HarvestObject.guid==harvest_object.guid) \
+                                           .filter(HarvestObject.harvest_source_id==harvest_object.harvest_source_id) \
+                                           .filter(HarvestObject.current==True) \
+                                           .first()
 
             # Flag previous object as not current anymore
             if previous_object:
@@ -351,15 +347,11 @@ class DCATRDFHarvester(DCATHarvester):
 
         dataset = self.modify_package_dict(dataset, {}, harvest_object)
 
-        # Check if a dataset with the same guid exists. A series is looked up among the ones this
-        # source imported: another source can have a series with the same URI.
-        if is_series:
-            existing_series = self._find_existing_series(harvest_object.guid, harvest_object.harvest_source_id)
-            existing_dataset = (
-                p.toolkit.get_action('package_show')({}, {'id': existing_series.id}) if existing_series else None
-            )
-        else:
-            existing_dataset = self._get_existing_dataset(harvest_object.guid)
+        # This source's own package for the guid, if any
+        existing = self._find_existing_package(harvest_object.guid, harvest_object.harvest_source_id, is_series)
+        existing_dataset = (
+            p.toolkit.get_action('package_show')({}, {'id': existing.id}) if existing else None
+        )
 
         import_warning = None
 
@@ -488,24 +480,26 @@ class DCATRDFHarvester(DCATHarvester):
 
         return True
 
-    def _find_existing_series(self, series_uri, source_id):
+    def _find_existing_package(self, guid, source_id, is_series=False):
         '''
-        The active dataset series that the given harvest source imported for the given RDF URI, or None.
-
-        A series belongs to the source that created it. Two sources can define a series with the same
-        URI, and each one gets its own, so it is found through this source's harvest objects and not
-        through the 'guid' extra, which both of them carry.
+        The active dataset (or dataset series) this source imported for the guid, or None. It is found
+        through this source's harvest objects, not through the 'guid' extra, which two sources can share.
         '''
         imported = model.Session.query(HarvestObject.package_id).\
-            filter(HarvestObject.guid == str(series_uri)).\
+            filter(HarvestObject.guid == str(guid)).\
             filter(HarvestObject.harvest_source_id == source_id).\
             filter(HarvestObject.package_id.isnot(None))
 
-        return model.Session.query(model.Package).\
+        packages = model.Session.query(model.Package).\
             filter(model.Package.id.in_(imported)).\
-            filter(model.Package.type == 'dataset_series').\
-            filter(model.Package.state == 'active').\
-            first()
+            filter(model.Package.state == 'active')
+
+        if is_series:
+            packages = packages.filter(model.Package.type == 'dataset_series')
+        else:
+            packages = packages.filter(model.Package.type != 'dataset_series')
+
+        return packages.first()
 
     def _parse_and_collect(
         self,
@@ -548,7 +542,7 @@ class DCATRDFHarvester(DCATHarvester):
                 series_uri = item.get("uri") or item.get("identifier")
                 if series_uri:
                     # Try to find an existing active dataset series of this source
-                    existing = self._find_existing_series(series_uri, harvest_job.source.id)
+                    existing = self._find_existing_package(series_uri, harvest_job.source.id, is_series=True)
 
                     if existing:
                         item["name"] = existing.name
