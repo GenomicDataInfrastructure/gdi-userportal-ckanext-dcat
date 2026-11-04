@@ -378,8 +378,10 @@ class DCATRDFHarvester(DCATHarvester):
                     package_schema = harvester.update_package_schema_for_create(package_schema)
                 context['schema'] = package_schema
 
-                # We need to explicitly provide a package ID
-                dataset['id'] = str(uuid.uuid4())
+                # We need to explicitly provide a package ID. A dataset series keeps the one it got
+                # when it was gathered: the datasets of this harvest point at it.
+                if not (dataset.get('type') == 'dataset_series' and dataset.get('id')):
+                    dataset['id'] = str(uuid.uuid4())
                 package_schema['id'] = [unicode_safe]
 
                 harvester_tmp_dict = {}
@@ -477,11 +479,8 @@ class DCATRDFHarvester(DCATHarvester):
             item.setdefault("extras", []).append({"key": "guid", "value": guid})
             guids_in_source.append(guid)
 
-            obj = HarvestObject(guid=guid, job=harvest_job, content=json.dumps(item))
-            obj.save()
-            object_ids.append(obj.id)
-
-            # Store mapping of RDF URI to dataset name if requested
+            # Store the RDF URI -> id/name mapping before the object is saved, so a new series already
+            # has its id when the datasets of this harvest point at it.
             if collect_series_mapping:
                 series_uri = item.get("uri") or item.get("identifier")
                 if series_uri:
@@ -496,11 +495,17 @@ class DCATRDFHarvester(DCATHarvester):
 
                     if existing:
                         item["name"] = existing.name
+                    elif not item.get("id"):
+                        item["id"] = str(uuid.uuid4())
 
                     series_mapping[str(series_uri)] = {
                         "id": existing.id if existing else item.get("id"),
                         "name": item["name"]
                     }
+
+            obj = HarvestObject(guid=guid, job=harvest_job, content=json.dumps(item))
+            obj.save()
+            object_ids.append(obj.id)
 
         if collect_series_mapping:
             return object_ids, series_mapping
