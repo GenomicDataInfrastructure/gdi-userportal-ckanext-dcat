@@ -14,6 +14,7 @@ import ckan.lib.plugins as lib_plugins
 from ckanext.harvest.model import HarvestObject, HarvestObjectExtra
 from ckanext.harvest.logic.schema import unicode_safe
 from ckanext.dcat.harvesters.base import DCATHarvester
+from ckanext.dcat.harvesters.invalid_values import call_dropping_invalid_values
 from ckanext.dcat.processors import RDFParserException, RDFParser
 from ckanext.dcat.interfaces import IDCATRDFHarvester
 
@@ -281,20 +282,23 @@ class DCATRDFHarvester(DCATHarvester):
                                     harvest_object, 'Import')
             return False
 
-        # Get the last harvested object (if any)
-        previous_object = model.Session.query(HarvestObject) \
-                                       .filter(HarvestObject.guid==harvest_object.guid) \
-                                       .filter(HarvestObject.current==True) \
-                                       .first()
+        def flag_current():
+            # Get the last harvested object (if any)
+            previous_object = model.Session.query(HarvestObject) \
+                                           .filter(HarvestObject.guid==harvest_object.guid) \
+                                           .filter(HarvestObject.current==True) \
+                                           .first()
 
-        # Flag previous object as not current anymore
-        if previous_object:
-            previous_object.current = False
-            previous_object.add()
+            # Flag previous object as not current anymore
+            if previous_object:
+                previous_object.current = False
+                previous_object.add()
 
-        # Flag this object as the current one
-        harvest_object.current = True
-        harvest_object.add()
+            # Flag this object as the current one
+            harvest_object.current = True
+            harvest_object.add()
+
+        flag_current()
 
         context = {
             'user': self._get_user_name(),
@@ -306,6 +310,8 @@ class DCATRDFHarvester(DCATHarvester):
 
         # Check if a dataset with the same guid exists
         existing_dataset = self._get_existing_dataset(harvest_object.guid)
+
+        import_warning = None
 
         try:
             package_plugin = lib_plugins.lookup_package_plugin(dataset.get('type', None))
@@ -334,11 +340,22 @@ class DCATRDFHarvester(DCATHarvester):
 
                 try:
                     if dataset:
-                        # Save reference to the package on the object
-                        harvest_object.package_id = dataset['id']
-                        harvest_object.add()
+                        def save_reference():
+                            # Save reference to the package on the object
+                            harvest_object.package_id = dataset['id']
+                            harvest_object.add()
 
-                        p.toolkit.get_action('package_update')(context, dataset)
+                        save_reference()
+
+                        def redo_bookkeeping():
+                            # CKAN rolls back when validation fails: that undoes the flags above too
+                            flag_current()
+                            save_reference()
+
+                        _, warning = call_dropping_invalid_values(
+                            p.toolkit.get_action('package_update'), context, dataset, before_retry=redo_bookkeeping
+                        )
+                        import_warning = warning
                     else:
                         log.info('Ignoring dataset %s' % existing_dataset['name'])
                         return 'unchanged'
@@ -373,19 +390,30 @@ class DCATRDFHarvester(DCATHarvester):
 
                 try:
                     if dataset:
-                        # Save reference to the package on the object
-                        harvest_object.package_id = dataset['id']
-                        harvest_object.add()
+                        def save_reference():
+                            # Save reference to the package on the object
+                            harvest_object.package_id = dataset['id']
+                            harvest_object.add()
 
-                        # Defer constraints and flush so the dataset can be indexed with
-                        # the harvest object id (on the after_show hook from the harvester
-                        # plugin)
-                        model.Session.execute(
-                            sa.text('SET CONSTRAINTS harvest_object_package_id_fkey DEFERRED')
+                            # Defer constraints and flush so the dataset can be indexed with
+                            # the harvest object id (on the after_show hook from the harvester
+                            # plugin)
+                            model.Session.execute(
+                                sa.text('SET CONSTRAINTS harvest_object_package_id_fkey DEFERRED')
+                            )
+                            model.Session.flush()
+
+                        save_reference()
+
+                        def redo_bookkeeping():
+                            # CKAN rolls back when validation fails: that undoes the flags above too
+                            flag_current()
+                            save_reference()
+
+                        _, warning = call_dropping_invalid_values(
+                            p.toolkit.get_action('package_create'), context, dataset, before_retry=redo_bookkeeping
                         )
-                        model.Session.flush()
-
-                        p.toolkit.get_action('package_create')(context, dataset)
+                        import_warning = warning
                     else:
                         log.info('Ignoring dataset %s' % name)
                         return 'unchanged'
@@ -408,6 +436,9 @@ class DCATRDFHarvester(DCATHarvester):
 
         finally:
             model.Session.commit()
+
+        if import_warning:
+            self._save_object_error(import_warning, harvest_object, 'Import')
 
         return True
 
