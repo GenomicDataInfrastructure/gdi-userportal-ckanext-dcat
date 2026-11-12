@@ -7,6 +7,7 @@ from rdflib.namespace import DCTERMS as DCT
 from rdflib.namespace import SKOS, Namespace
 
 from ckanext.dcat.profiles.base import VCARD, CleanedURIRef, URIRefOrLiteral
+from ckanext.dcat.schema_fields import is_multiple_text
 from ckanext.dcat.utils import resource_uri
 from ckanext.dcat.profiles.euro_health_dcat_ap import (
     DPV,
@@ -421,11 +422,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
         frequency = next(
             (f for f in (hours or {}).get("repeating_subfields", []) if f["field_name"] == "frequency"), None
         )
-        return frequency is None or self._is_listed(frequency)
-
-    @staticmethod
-    def _is_listed(field):
-        return field.get("preset") == "multiple_text" or "scheming_multiple_text" in str(field.get("validators", ""))
+        return frequency is None or is_multiple_text(frequency)
 
     def _add_temporal_entities(self, subject, predicate, entities):
         for entity in entities:
@@ -589,7 +586,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
             return False
         if key == "rights":
             return bool(field.get("repeating_subfields"))
-        return self._is_listed(field)
+        return is_multiple_text(field)
 
     def _resource_for_the_shared_writer(self, resource_dict):
         """The shared writer writes one access URL and download URL and one rights statement; the others are added after it."""
@@ -809,7 +806,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
         """
         field = self._schema_field("contact")
         url = next((f for f in (field or {}).get("repeating_subfields", []) if f["field_name"] == "url"), None)
-        return not (url and "scheming_multiple_text" in str(url.get("validators", "")))
+        return not is_multiple_text(url)
 
     def _single_contact_url(self, contact):
         urls = self._as_list(contact.get("url"))
@@ -854,7 +851,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
         sub = next((f for f in (field or {}).get("repeating_subfields", []) if f["field_name"] == subfield), None)
         if sub is None:
             return True
-        return sub.get("preset") == "multiple_text" or "scheming_multiple_text" in str(sub.get("validators", ""))
+        return is_multiple_text(sub)
 
     def _strings(self, value):
         return [str(item).strip() for item in self._as_list(value) if str(item).strip()]
@@ -866,7 +863,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
         field = self._schema_field(field_name)
         if not field:
             return False
-        return field.get("preset") == "multiple_text" or "scheming_multiple_text" in str(field.get("validators", ""))
+        return is_multiple_text(field)
 
     def _read_the_listed_fields(self, dataset_dict, dataset_ref):
         for key, predicate in LISTABLE:
@@ -973,7 +970,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
         sub = next((f for f in (field or {}).get("repeating_subfields", []) if f["field_name"] == subfield), None)
         if sub is None:
             return True
-        return self._is_listed(sub)
+        return is_multiple_text(sub)
 
     def _relationship_details(self, subject, predicate):
         """A dcat:Relationship has one or more dct:relation and dcat:hadRole in R8.

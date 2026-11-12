@@ -10,6 +10,7 @@ from geomet import InvalidGeoJSONException, wkt
 from rdflib import BNode, Literal, URIRef, term, PROV
 from rdflib.namespace import ORG, RDF, RDFS, SKOS, XSD, Namespace
 
+from ckanext.dcat.schema_fields import is_multiple_text
 from ckanext.dcat.utils import DCAT_EXPOSE_SUBCATALOGS
 from ckanext.dcat.validators import is_date, is_year, is_year_month
 
@@ -1264,14 +1265,14 @@ class RDFProfile(object):
 
     def _set_list_dataset_value(self, dataset_dict, key, value):
         schema_field = self._schema_field(key)
-        if schema_field and "scheming_multiple_text" in schema_field["validators"]:
+        if is_multiple_text(schema_field):
             return self._set_dataset_value(dataset_dict, key, value)
         else:
             return self._set_dataset_value(dataset_dict, key, json.dumps(value))
 
     def _set_list_resource_value(self, resource_dict, key, value):
         schema_field = self._schema_resource_field(key)
-        if schema_field and "scheming_multiple_text" in schema_field["validators"]:
+        if is_multiple_text(schema_field):
             resource_dict[key] = value
         else:
             resource_dict[key] = json.dumps(value)

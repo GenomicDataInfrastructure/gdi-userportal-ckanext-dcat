@@ -1,6 +1,9 @@
 import json
 
 from rdflib import URIRef, BNode, Literal, term
+
+from ckanext.dcat.schema_fields import is_multiple_text
+
 from .base import RDFProfile, CleanedURIRef, URIRefOrLiteral
 from .base import (
     RDF,
@@ -135,9 +138,7 @@ class EuropeanDCATAPSchemingProfile(RDFProfile):
                 field_name
             ) or self._schema_resource_field(field_name)
 
-            if schema_field and "scheming_multiple_text" in schema_field.get(
-                "validators", []
-            ):
+            if is_multiple_text(schema_field):
                 if isinstance(data_dict[field_name], str):
                     try:
                         data_dict[field_name] = json.loads(data_dict[field_name])
