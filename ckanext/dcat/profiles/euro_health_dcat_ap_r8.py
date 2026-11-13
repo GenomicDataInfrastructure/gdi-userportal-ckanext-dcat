@@ -843,6 +843,9 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
             if not value:
                 continue
             values = self._strings(value)
+            if not values:
+                agent.pop(key, None)
+                continue
             agent[key] = values if self._agent_subfield_is_list(key) else values[0]
 
     def _agent_subfield_is_list(self, subfield):
