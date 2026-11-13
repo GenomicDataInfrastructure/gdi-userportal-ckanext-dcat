@@ -56,7 +56,7 @@ For a full overview of how CKAN dataset fields map to DCAT-AP-NL properties, ref
 
 ### Introduction
 
-This extension contains a profile (`euro_health_dcat_ap`) for the proposed 
+This extension contains a profile (`euro_health_dcat_ap`) for the
 [HealthDCAT-AP](https://healthdcat-ap.github.io/) specification.
 This is a health-related extension of the DCAT application profile for sharing information about
 Catalogues containing Datasets and Data Services descriptions in Europe (DCAT-AP).
@@ -70,9 +70,9 @@ The goal of this profile is to provide the wider FAIR community and other EU por
 point for implementing HealthDCAT-AP within their own data catalogs.
 
 !!! Note
-    HealthDCAT-AP is still under active development and not finalized yet. Cardinalities,
-    certain vocabularies and the namespace have not been officially ratified yet. These are
-    expected to be finalized after the public consultation in Q1 2025.
+    HealthDCAT-AP is a draft specification: cardinalities, vocabularies and the namespace change
+    between releases. The profile follows the HealthDCAT-AP model described above; the profile for
+    Release 8 is `euro_health_dcat_ap_r8`, see [Release 8](#release-8).
 
 
 ### Usage
@@ -91,7 +91,15 @@ See the [documentation](getting-started.md#schemas) on how to set it up. You can
 scheming.dataset_schemas = ckanext.dcat.schemas:health_dcat_ap.yaml
 ```
 
-This profile has currently no additional settings. 
+The profile has no settings of its own.
+
+
+### Release 8
+
+`euro_health_dcat_ap_r8` implements HealthDCAT-AP Release 8 on top of `euro_health_dcat_ap`. It is
+enabled by listing it in place of `euro_health_dcat_ap`. The field mapping is in
+[mapping-healthdcat.md](mapping-healthdcat.md); the open differences from the specification are in
+the [Release 8 note](healthdcat-ap-r8-gap-analysis.md).
 
 ### Field Mapping
 
@@ -109,21 +117,21 @@ of limitations and implementaiton decisions made during development of this prof
    fields). Note that some mandatory fields are currently impossible to fill with real data e.g. the
    Health Data Access Body (HDAB) field: the EHDS legislation has not been implemented yet and no HDABs
    have been formally appointed.
-2. The HealthDCAT-AP namespace is not formally defined yet. For now,
-   `http://healthdataportal.eu/ns/health#` is used. This will be updated once the final namespace is
-   standardized.
+2. The profile uses the namespace `http://healthdataportal.eu/ns/health#`. Changing the namespace
+   means changing the profile.
 3. The official examples of the standard uses the `dct:description` property to encode the data
    purpose. This does not seem to be according to the Data Privacy Vocabulary specification, which
    proposes a controlled vocabulary. See [this issue](https://github.com/HealthDCAT-AP-de/healthdcat-ap.de/issues/11) 
    for the German perspective on this.
-4. The distributions proposed by HealthDCAT-AP, *analytics* and *sample*, are not specifically
-   implemented. URIs are linked, the resources themselves are not loaded. For *sample*, as this is
-   an upstream DCAT-AP property, this can be included once picked up there.
+4. *analytics* is read and written as a list of IRIs; the resources behind them are not loaded.
+   *sample* is an upstream DCAT-AP 3 property and is read by that profile.
 5. Documentation (*foaf:page*) is implemented as an URI. There is some HealthDCAT-AP example data
   out in the wild that uses a blank node for this and adds several properties, however this is
    inconsistent with other DCAT implementations.
-6. DatasetSeries are not supported yet by CKAN, and also not by this profile.
-7. The *quality annotation* property has not been implemented due to usage not being completely
-defined yet.
-8. There is no multilingual support yet.
+6. Dataset series follow the DCAT-AP 3 profile, which this profile extends. The health-specific
+   fields are not defined on a series.
+7. The *quality annotation* is read and written as a `dqv:hasQualityAnnotation` with an
+   `oa:Annotation`. Only annotations whose body and target are `http(s)` IRIs are kept.
+8. Language-tagged values are supported for the fields listed in `MULTILINGUAL_LITERAL_FIELDS` of
+   the profile, and need a multilingual schema; see [Multilingual support](profiles.md#multilingual-support).
 9. For other properties, any limitations from the DCAT-AP profiles still apply.

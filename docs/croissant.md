@@ -23,7 +23,7 @@ Once the plugin is enabled, the Croissant output will be embedded in the source 
 
 ## Schema mapping
 
-The extension includes a [schema](getting-started.md#schemas) ([`ckanext/dcat/schemas/croissant.yaml`](https://github.com/ckan/ckanext-dcat/tree/master/ckanext/dcat/schemas/croissant.yml)) for sites that want to take advantage of all the entities and properties of the Croissant spec.
+The extension includes a [schema](getting-started.md#schemas) ([`ckanext/dcat/schemas/croissant.yaml`](https://github.com/ckan/ckanext-dcat/tree/master/ckanext/dcat/schemas/croissant.yaml)) for sites that want to take advantage of all the entities and properties of the Croissant spec.
 
 This maps CKAN's datasets to [schema.org Datasets](https://docs.mlcommons.org/croissant/docs/croissant-spec.html#dataset-level-information) and resources to [Croissant resources](https://docs.mlcommons.org/croissant/docs/croissant-spec.html#resources), which can have type `FileObject` or `FileSet`. For `FileSet` resources, use the "Sub-resources" repeating subfield to describe the contents of the file set.
 

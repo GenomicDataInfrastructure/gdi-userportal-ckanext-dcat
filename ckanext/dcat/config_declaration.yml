@@ -12,10 +12,10 @@ groups:
       - key: ckanext.dcat.metadata_profiles
         description: |
           The metadata profiles the deployment enables, in precedence order, separated by spaces
-          or commas. Written at container start by the GDI User Portal profile generator, which
-          also writes `ckanext.dcat.metadata_profiles.<name>.rdf_profiles` (the ordered RDF
-          profiles of each one). A harvest source selects one with the `metadata_profile` key of
-          its config. Leave unset on a deployment without metadata profiles.
+          or commas. The deployment that provides the profiles writes this option and
+          `ckanext.dcat.metadata_profiles.<name>.rdf_profiles` (the ordered RDF profiles of each
+          one). A harvest source selects one with the `metadata_profile` key of its config. Leave
+          unset on a deployment without metadata profiles.
         example: 'healthdcat_r8 gdi_current'
 
       - key: ckanext.dcat.metadata_profiles.main
@@ -116,7 +116,7 @@ groups:
         default: false
         description: |
           Store information about the origin catalog when harvesting datasets.
-          See https://github.com/ckan/ckanext-dcat#transitive-harvesting for more details.
+          See the transitive harvesting section of docs/harvester.md for more details.
 
   - annotation: Deprecated options (will be removed in future versions)
     options:
