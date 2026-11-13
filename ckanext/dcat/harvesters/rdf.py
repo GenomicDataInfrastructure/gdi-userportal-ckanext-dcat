@@ -148,7 +148,7 @@ class DCATRDFHarvester(DCATHarvester):
             if rdf_format not in supported_formats:
                 raise ValueError('rdf_format should be one of: ' + ", ".join(supported_formats))
 
-        # 'metadata_profile' (a profile pack) or 'profile' (a raw RDF profile chain), not both
+        # 'metadata_profile' (a metadata profile) or 'profile' (a raw RDF profile chain), not both
         try:
             resolve_source_profile(source_config_obj, p.toolkit.config, installed_rdf_profiles())
         except MetadataProfileError as e:

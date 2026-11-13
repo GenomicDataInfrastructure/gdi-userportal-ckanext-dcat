@@ -39,7 +39,7 @@ In addition to that, there are two changes needed at the schema level. Both will
       help_text: The type of sorting that needs to be performed on series members.
     ```
 	!!! Note
-		Currently the dataset type value needs to be `dataset_type`. Other values might be allowed in the future.
+		The dataset type must be `dataset_series`: the extension finds series by this type.
 
 2. The Dataset schema (or schemas) must contain the field used to link datasets to series:
 

@@ -1,3 +1,6 @@
+This page summarises the options. The names, defaults and descriptions are declared in
+`ckanext/dcat/config_declaration.yml`, which is the source of truth; change an option there.
+
 ### General settings
 
 #### ckanext.dcat.rdf.profiles
@@ -11,6 +14,52 @@ ckanext.dcat.rdf.profiles = euro_dcat_ap_2 my_local_ap
 Default value: `euro_dcat_ap_3`
 
 RDF profiles to use when parsing and serializing. See [Profiles](profiles.md#profiles) for more details.
+
+
+#### ckanext.dcat.metadata_profiles
+
+Example:
+
+```
+ckanext.dcat.metadata_profiles = profile_a profile_b
+```
+
+Default value: none
+
+The metadata profiles the deployment enables, in precedence order, separated by spaces or
+commas. A harvest source selects one of them with its `metadata_profile` setting (see
+[Profile of a harvest source](harvester.md#profile-of-a-harvest-source)). Leave it unset when the
+deployment has no metadata profiles.
+
+Each enabled profile lists its RDF profiles, in order, in
+`ckanext.dcat.metadata_profiles.<name>.rdf_profiles`. The deployment sets these options; this
+extension does not write them.
+
+
+#### ckanext.dcat.metadata_profiles.main
+
+Example:
+
+```
+ckanext.dcat.metadata_profiles.main = profile_a
+```
+
+Default value: the first of `ckanext.dcat.metadata_profiles`
+
+The metadata profile a harvest source uses when its own setting names none. It must be one of
+`ckanext.dcat.metadata_profiles`; otherwise the harvester reports an error.
+
+
+#### ckanext.dcat.metadata_profiles.<name>.rdf_profiles
+
+Example:
+
+```
+ckanext.dcat.metadata_profiles.profile_a.rdf_profiles = euro_dcat_ap_3 euro_dcat_ap_scheming
+```
+
+The RDF profiles of the metadata profile `<name>`, in the order they run. A metadata profile
+without this option cannot be used.
 
 
 #### ckanext.dcat.translate_keys
@@ -125,7 +174,7 @@ Maximum file size that will be downloaded for parsing by the harvesters
 Default value: `False`
 
 Store information about the origin catalog when harvesting datasets.
-See https://github.com/ckan/ckanext-dcat#transitive-harvesting for more details.
+See [Transitive harvesting](harvester.md#transitive-harvesting) for more details.
 
 
 ### Deprecated options (will be removed in future versions)

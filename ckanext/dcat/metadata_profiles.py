@@ -1,12 +1,11 @@
 """
 Metadata profiles of a deployment, and the one a harvest source selects.
 
-A deployment enables one or more metadata profiles (for example ``gdi_current`` and
-``healthdcat_r8``) and names one of them the main profile. ``gdi_userportal``'s profile
-pack generator writes that to the CKAN config at container start::
+A deployment enables one or more metadata profiles and names one of them the main profile. The
+deployment writes these options to the CKAN config::
 
-    ckanext.dcat.metadata_profiles = healthdcat_r8 gdi_current
-    ckanext.dcat.metadata_profiles.main = gdi_current
+    ckanext.dcat.metadata_profiles = profile_a profile_b
+    ckanext.dcat.metadata_profiles.main = profile_a
     ckanext.dcat.metadata_profiles.<name>.rdf_profiles = <ckan.rdf.profiles entry points>
 
 A harvest source picks its profile with the ``metadata_profile`` key of its config JSON.

@@ -11,10 +11,10 @@ import pytest
 from ckanext.dcat.harvesters.rdf import DCATRDFHarvester
 
 CONFIG = {
-    "ckanext.dcat.metadata_profiles": "healthdcat_r8 gdi_current",
-    "ckanext.dcat.metadata_profiles.main": "gdi_current",
-    "ckanext.dcat.metadata_profiles.healthdcat_r8.rdf_profiles": "euro_health_dcat_ap_r8",
-    "ckanext.dcat.metadata_profiles.gdi_current.rdf_profiles": "fairdatapoint_dcat_ap euro_dcat_ap_nl",
+    "ckanext.dcat.metadata_profiles": "profile_b profile_a",
+    "ckanext.dcat.metadata_profiles.main": "profile_a",
+    "ckanext.dcat.metadata_profiles.profile_b.rdf_profiles": "euro_health_dcat_ap_r8",
+    "ckanext.dcat.metadata_profiles.profile_a.rdf_profiles": "fairdatapoint_dcat_ap euro_dcat_ap_nl",
 }
 
 
@@ -47,7 +47,7 @@ def test_a_source_without_a_profile_is_parsed_with_the_main_profile(harvester):
 
 
 def test_a_source_with_a_metadata_profile_is_parsed_with_its_chain(harvester):
-    chain = harvester._source_rdf_profiles(_job({"metadata_profile": "healthdcat_r8"}))
+    chain = harvester._source_rdf_profiles(_job({"metadata_profile": "profile_b"}))
 
     assert chain == ["euro_health_dcat_ap_r8"]
 
@@ -70,11 +70,11 @@ def test_the_gather_of_such_a_source_reports_the_error_and_harvests_nothing(harv
 
 def test_a_source_config_that_names_both_keys_is_rejected_when_it_is_saved(harvester):
     with pytest.raises(ValueError, match="ambiguous"):
-        harvester.validate_config(json.dumps({"metadata_profile": "healthdcat_r8", "profile": "euro_dcat_ap_3"}))
+        harvester.validate_config(json.dumps({"metadata_profile": "profile_b", "profile": "euro_dcat_ap_3"}))
 
 
 def test_a_source_config_with_an_enabled_profile_is_accepted(harvester):
-    config = json.dumps({"metadata_profile": "healthdcat_r8"})
+    config = json.dumps({"metadata_profile": "profile_b"})
 
     assert harvester.validate_config(config) == config
 

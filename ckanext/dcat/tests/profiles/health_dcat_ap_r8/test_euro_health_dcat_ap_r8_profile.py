@@ -48,7 +48,7 @@ LISTED = {"preset": "multiple_text", "validators": "ignore_missing scheming_mult
 
 
 def _agent_subfields(*extra):
-    """The agent of the R8 pack: the email, contact page and telephone of its contact point are lists."""
+    """An agent whose schema declares the email, contact page and telephone of its contact point as lists."""
     return [
         _field(n, **(LISTED if n in ("email", "url", "telephone") else {}))
         for n in ("uri", "name", "name_translated", "email", "url", "type", "publisher_note", *extra)
@@ -275,7 +275,7 @@ class TestNotAnR8Property:
 
 
 class TestSingleValuedFields:
-    """Q3: the field keeps one value and a warning says when others are dropped (ADR 0001)."""
+    """The field keeps one value (the first), and a warning says when others are dropped."""
 
     def test_several_identifiers_give_a_warning_and_one_value(self, caplog):
         with caplog.at_level(logging.WARNING):
@@ -691,7 +691,7 @@ class TestDistributionsAndDataServices:
 
 
 class TestWhatTheSchemaHasNoSubfieldFor:
-    """With gdi_current listed first its narrower agent and data service fields win."""
+    """Subfields that the loaded schema does not define are dropped from agents and data services."""
 
     def test_the_contact_point_subfields_are_dropped_when_the_schema_lacks_them(self):
         narrow = {
@@ -810,7 +810,7 @@ CONTACT_TTL = PREFIXES + """
                         vcard:hasEmail <mailto:support@example.org> ] .
 """
 
-# gdi_current lists the urls of a contact, so with it listed first the field keeps its list
+# A schema that lists the urls of a contact keeps the list
 LISTED_URLS_SCHEMA = {
     **SCHEMA,
     "dataset_fields": [
@@ -1019,7 +1019,7 @@ MANY_TTL = AGENT_PREFIXES + """
 
 
 def single_valued_schema():
-    """An agent whose email, contact page and telephone hold one value (the gdi_current agent)."""
+    """An agent whose schema declares its email, contact page and telephone as single values."""
     plain = [_field(n) for n in ("uri", "name", "name_translated", "email", "url", "type", "publisher_note", *CONTACT_POINT)]
     return {
         **SCHEMA,
@@ -1100,7 +1100,7 @@ RELATIONSHIP_TTL = PREFIXES + """
 
 
 def single_relation_schema():
-    """A relationship whose relation and role hold one value (the gdi_current one)."""
+    """A relationship whose schema declares its relation and role as single values."""
     plain = [_field(n) for n in ("uri", "relation", "role")]
     return {
         **SCHEMA,
@@ -1290,7 +1290,7 @@ def _multilingual(turtle, predicate):
 
 
 def listed_schema():
-    """The R8 pack: the landing page and the type of a dataset are lists."""
+    """A schema that declares the landing page and the type of a dataset as multiple values gives lists."""
     return {
         **SCHEMA,
         "dataset_fields": [*SCHEMA["dataset_fields"], _field("url", **LISTED), _field("dcat_type", **LISTED)],
@@ -1463,7 +1463,7 @@ DISTRIBUTION_LISTS_TTL = PREFIXES + """
 
 
 def distribution_lists_schema():
-    """The R8 pack: the access and download URL of a distribution are lists, the rights a list of statements."""
+    """A schema that declares the access and download URL of a distribution as multiple values gives lists; the rights are a list of statements."""
     return {
         **SCHEMA,
         "resource_fields": [
@@ -1574,7 +1574,7 @@ CHECKSUM_TTL = CHECKSUM_TTL.replace("@prefix odrl", "@prefix spdx: <http://spdx.
 
 
 def checksum_schema():
-    """The R8 pack: the checksum of a distribution is an entity with an algorithm and a value, not two plain fields."""
+    """With a checksum entity in the schema, the checksum of a distribution is an entity with an algorithm and a value."""
     return {
         **SCHEMA,
         "resource_fields": [
@@ -1658,7 +1658,7 @@ SERVICE_TTL = AGENT_PREFIXES + """
 
 
 def multilingual_service_schema():
-    """The R8 pack: the title, description and endpoint description of a data service hold a text per language."""
+    """A schema that declares the title, description and endpoint description of a data service as language maps gets a text per language."""
     fluent = {"preset": "fluent_text"}
     service = [_field("title", **fluent), _field("description", **fluent), _field("endpoint_description", **fluent)]
     return {**SCHEMA, "resource_fields": [_field("access_services", repeating_subfields=service)]}
@@ -1739,3 +1739,74 @@ class TestDataServiceTextsPerLanguage:
         (service,) = services_of(again["resources"][0])
         assert service["title"] == {"en": "Query API", "nl": "Bevragings-API"}
         assert service["description"] == {"en": "Queries the cohort", "nl": "Bevraagt het cohort"}
+
+
+class TestBlankContactValues:
+    """A contact value that is only whitespace is not a value, whatever the schema says."""
+
+    def test_a_whitespace_only_email_is_dropped_when_the_schema_holds_one(self):
+        single_email = [
+            _field(n, **(LISTED if n in ("url", "telephone") else {}))
+            for n in ("uri", "name", "name_translated", "email", "url", "type", "publisher_note", *CONTACT_POINT)
+        ]
+        schema = {
+            **SCHEMA,
+            "dataset_fields": [
+                _field("publisher", repeating_subfields=single_email) if f["field_name"] == "publisher" else f
+                for f in SCHEMA["dataset_fields"]
+            ],
+        }
+        turtle = PREFIXES + """
+@prefix cv: <http://data.europa.eu/m8g/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+<http://example.org/dataset> a dcat:Dataset ; dct:publisher <http://example.org/publisher> .
+<http://example.org/publisher> a foaf:Agent ;
+    cv:contactPoint [ a cv:ContactPoint ; cv:email " " ] .
+"""
+        (publisher,) = parse(turtle, schema=schema)["publisher"]
+
+        assert "email" not in publisher
+
+
+class TestQualityAnnotationMotivation:
+    """oa:motivatedBy has an IRI range: a literal motivation is not read, and an IRI round-trips."""
+
+    ANNOTATION_TTL = PREFIXES + """
+@prefix dqv: <http://www.w3.org/ns/dqv#> .
+@prefix oa: <http://www.w3.org/ns/oa#> .
+<http://example.org/dataset> a dcat:Dataset ;
+    dqv:hasQualityAnnotation [ a oa:Annotation ;
+        oa:hasBody <https://quality.example.org/certificates/1> ;
+        oa:hasTarget <http://example.org/dataset> ;
+        oa:motivatedBy MOTIVATION ] .
+"""
+
+    def test_a_literal_motivation_is_ignored_with_a_warning(self, caplog):
+        turtle = self.ANNOTATION_TTL.replace("MOTIVATION", '"assessed by a person"')
+        with caplog.at_level(logging.WARNING):
+            dataset = parse(turtle, EuropeanHealthDCATAPProfile)
+
+        (annotation,) = dataset["quality_annotation"]
+        assert "motivated_by" not in annotation
+        assert annotation["body"] == "https://quality.example.org/certificates/1"
+        assert any("motivat" in r.getMessage() for r in caplog.records)
+
+    def test_an_iri_motivation_is_read_and_written_back_as_an_iri(self):
+        turtle = self.ANNOTATION_TTL.replace("MOTIVATION", "dqv:qualityAssessment")
+        dataset = parse(turtle, EuropeanHealthDCATAPProfile)
+        assert dataset["quality_annotation"][0]["motivated_by"] == "http://www.w3.org/ns/dqv#qualityAssessment"
+
+        graph = serialize(dataset, EuropeanHealthDCATAPProfile)
+        (annotation,) = values(graph, DQV.hasQualityAnnotation)
+        assert values(graph, OA.motivatedBy, annotation) == [URIRef("http://www.w3.org/ns/dqv#qualityAssessment")]
+
+    def test_a_literal_motivation_is_not_written(self):
+        dataset = {"quality_annotation": [{
+            "body": "https://quality.example.org/certificates/1",
+            "target": "http://example.org/dataset",
+            "motivated_by": "assessed by a person",
+        }]}
+        graph = serialize(dataset, EuropeanHealthDCATAPProfile)
+
+        (annotation,) = values(graph, DQV.hasQualityAnnotation)
+        assert values(graph, OA.motivatedBy, annotation) == []

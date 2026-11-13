@@ -38,3 +38,15 @@ def test_produce(cli):
     assert result.exit_code == 0
 
     assert json.loads(result.stdout)["@context"]["dcat"] == "http://www.w3.org/ns/dcat#"
+
+
+def test_profiles_help_shows_the_default_profiles():
+    from click.testing import CliRunner
+
+    from ckanext.dcat.processors import DEFAULT_RDF_PROFILES
+
+    for command in ("consume", "produce"):
+        result = CliRunner().invoke(dcat_cli, [command, "--help"])
+        assert result.exit_code == 0
+        assert " ".join(DEFAULT_RDF_PROFILES) in " ".join(result.output.split())
+        assert "{DEFAULT_RDF_PROFILES}" not in result.output
