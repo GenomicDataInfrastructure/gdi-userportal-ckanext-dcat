@@ -13,24 +13,24 @@ from ckanext.dcat.metadata_profiles import (
     resolve_source_profile,
 )
 
-GDI_CHAIN = ["fairdatapoint_dcat_ap", "euro_dcat_ap_nl"]
+CHAIN_A = ["fairdatapoint_dcat_ap", "euro_dcat_ap_nl"]
 R8_CHAIN = ["euro_health_dcat_ap_r8"]
 
 BOTH = {
-    "ckanext.dcat.metadata_profiles": "healthdcat_r8 gdi_current",
-    "ckanext.dcat.metadata_profiles.main": "gdi_current",
-    "ckanext.dcat.metadata_profiles.gdi_current.rdf_profiles": "fairdatapoint_dcat_ap euro_dcat_ap_nl",
-    "ckanext.dcat.metadata_profiles.healthdcat_r8.rdf_profiles": "euro_health_dcat_ap_r8",
+    "ckanext.dcat.metadata_profiles": "profile_b profile_a",
+    "ckanext.dcat.metadata_profiles.main": "profile_a",
+    "ckanext.dcat.metadata_profiles.profile_a.rdf_profiles": "fairdatapoint_dcat_ap euro_dcat_ap_nl",
+    "ckanext.dcat.metadata_profiles.profile_b.rdf_profiles": "euro_health_dcat_ap_r8",
     "ckanext.dcat.rdf.profiles": "fairdatapoint_dcat_ap euro_dcat_ap_nl",
 }
 
 # A deployment that enables one metadata profile. The config still holds the RDF profile
 # option of a second one, which must not make it enabled.
-ONLY_GDI = {
-    "ckanext.dcat.metadata_profiles": "gdi_current",
-    "ckanext.dcat.metadata_profiles.main": "gdi_current",
-    "ckanext.dcat.metadata_profiles.gdi_current.rdf_profiles": "fairdatapoint_dcat_ap euro_dcat_ap_nl",
-    "ckanext.dcat.metadata_profiles.healthdcat_r8.rdf_profiles": "euro_health_dcat_ap_r8",
+ONLY_A = {
+    "ckanext.dcat.metadata_profiles": "profile_a",
+    "ckanext.dcat.metadata_profiles.main": "profile_a",
+    "ckanext.dcat.metadata_profiles.profile_a.rdf_profiles": "fairdatapoint_dcat_ap euro_dcat_ap_nl",
+    "ckanext.dcat.metadata_profiles.profile_b.rdf_profiles": "euro_health_dcat_ap_r8",
     "ckanext.dcat.rdf.profiles": "fairdatapoint_dcat_ap euro_dcat_ap_nl",
 }
 
@@ -52,58 +52,58 @@ class TestNoProfileInTheSource:
     def test_gets_the_main_profile(self, source_config):
         resolved = resolve_source_profile(source_config, BOTH)
 
-        assert resolved.name == "gdi_current"
-        assert resolved.rdf_profiles == GDI_CHAIN
+        assert resolved.name == "profile_a"
+        assert resolved.rdf_profiles == CHAIN_A
         assert resolved.origin == ORIGIN_DEFAULT
 
     def test_follows_the_main_profile_of_the_deployment(self):
-        config = {**BOTH, "ckanext.dcat.metadata_profiles.main": "healthdcat_r8"}
+        config = {**BOTH, "ckanext.dcat.metadata_profiles.main": "profile_b"}
 
         resolved = resolve_source_profile({}, config)
 
-        assert (resolved.name, resolved.rdf_profiles) == ("healthdcat_r8", R8_CHAIN)
+        assert (resolved.name, resolved.rdf_profiles) == ("profile_b", R8_CHAIN)
 
     def test_main_defaults_to_the_first_enabled_profile(self):
         config = {k: v for k, v in BOTH.items() if k != "ckanext.dcat.metadata_profiles.main"}
 
-        assert main_profile(config) == "healthdcat_r8"
-        assert resolve_source_profile({}, config).name == "healthdcat_r8"
+        assert main_profile(config) == "profile_b"
+        assert resolve_source_profile({}, config).name == "profile_b"
 
     def test_a_main_profile_that_is_not_enabled_is_a_configuration_error(self):
-        config = {**BOTH, "ckanext.dcat.metadata_profiles.main": "gdi_legacy"}
+        config = {**BOTH, "ckanext.dcat.metadata_profiles.main": "profile_c"}
 
-        with pytest.raises(MetadataProfileError, match="main metadata profile 'gdi_legacy'.*Enabled: healthdcat_r8, gdi_current"):
+        with pytest.raises(MetadataProfileError, match="main metadata profile 'profile_c'.*Enabled: profile_b, profile_a"):
             resolve_source_profile({}, config)
 
 
 class TestMetadataProfileInTheSource:
-    def test_selects_gdi_current(self):
-        resolved = resolve_source_profile({"metadata_profile": "gdi_current"}, BOTH)
+    def test_selects_profile_a(self):
+        resolved = resolve_source_profile({"metadata_profile": "profile_a"}, BOTH)
 
         assert (resolved.name, resolved.rdf_profiles, resolved.origin) == (
-            "gdi_current",
-            GDI_CHAIN,
+            "profile_a",
+            CHAIN_A,
             ORIGIN_METADATA_PROFILE,
         )
 
     def test_selects_a_profile_that_is_not_the_main_one(self):
-        resolved = resolve_source_profile({"metadata_profile": "healthdcat_r8"}, BOTH)
+        resolved = resolve_source_profile({"metadata_profile": "profile_b"}, BOTH)
 
         assert (resolved.name, resolved.rdf_profiles, resolved.origin) == (
-            "healthdcat_r8",
+            "profile_b",
             R8_CHAIN,
             ORIGIN_METADATA_PROFILE,
         )
 
     def test_ignores_whitespace_around_the_name(self):
-        assert resolve_source_profile({"metadata_profile": " healthdcat_r8 "}, BOTH).name == "healthdcat_r8"
+        assert resolve_source_profile({"metadata_profile": " profile_b "}, BOTH).name == "profile_b"
 
     def test_a_profile_that_is_not_enabled_is_rejected_naming_the_enabled_ones(self):
         with pytest.raises(MetadataProfileError) as error:
-            resolve_source_profile({"metadata_profile": "healthdcat_r8"}, ONLY_GDI)
+            resolve_source_profile({"metadata_profile": "profile_b"}, ONLY_A)
 
         assert str(error.value) == (
-            "Metadata profile 'healthdcat_r8' is not enabled on this deployment. Enabled: gdi_current"
+            "Metadata profile 'profile_b' is not enabled on this deployment. Enabled: profile_a"
         )
 
     def test_an_unknown_name_is_rejected_the_same_way(self):
@@ -111,22 +111,22 @@ class TestMetadataProfileInTheSource:
             resolve_source_profile({"metadata_profile": "healthdcat_r9"}, BOTH)
 
         assert "'healthdcat_r9' is not enabled" in str(error.value)
-        assert "Enabled: healthdcat_r8, gdi_current" in str(error.value)
+        assert "Enabled: profile_b, profile_a" in str(error.value)
 
     def test_the_name_is_case_sensitive(self):
-        with pytest.raises(MetadataProfileError, match="'GDI_current' is not enabled"):
-            resolve_source_profile({"metadata_profile": "GDI_current"}, BOTH)
+        with pytest.raises(MetadataProfileError, match="'PROFILE_A' is not enabled"):
+            resolve_source_profile({"metadata_profile": "PROFILE_A"}, BOTH)
 
-    @pytest.mark.parametrize("value", [123, True, ["gdi_current"], {"name": "gdi_current"}])
+    @pytest.mark.parametrize("value", [123, True, ["profile_a"], {"name": "profile_a"}])
     def test_a_value_that_is_not_a_string_is_rejected(self, value):
         with pytest.raises(MetadataProfileError, match="'metadata_profile' must be a string"):
             resolve_source_profile({"metadata_profile": value}, BOTH)
 
     def test_an_enabled_profile_without_rdf_profiles_is_a_configuration_error(self):
-        config = {k: v for k, v in BOTH.items() if "healthdcat_r8.rdf_profiles" not in k}
+        config = {k: v for k, v in BOTH.items() if "profile_b.rdf_profiles" not in k}
 
-        with pytest.raises(MetadataProfileError, match="No RDF profiles are configured for metadata profile 'healthdcat_r8'"):
-            resolve_source_profile({"metadata_profile": "healthdcat_r8"}, config)
+        with pytest.raises(MetadataProfileError, match="No RDF profiles are configured for metadata profile 'profile_b'"):
+            resolve_source_profile({"metadata_profile": "profile_b"}, config)
 
 
 class TestLegacyProfileKey:
@@ -142,14 +142,14 @@ class TestLegacyProfileKey:
     def test_a_chain_of_several_profiles(self):
         resolved = resolve_source_profile({"profile": "fairdatapoint_dcat_ap euro_dcat_ap_nl"}, BOTH)
 
-        assert resolved.rdf_profiles == GDI_CHAIN
+        assert resolved.rdf_profiles == CHAIN_A
 
     def test_an_empty_profile_means_the_main_profile(self):
         assert resolve_source_profile({"profile": ""}, BOTH).origin == ORIGIN_DEFAULT
 
     def test_both_keys_are_ambiguous(self):
         with pytest.raises(MetadataProfileError, match="Both 'metadata_profile' and 'profile' are set"):
-            resolve_source_profile({"metadata_profile": "gdi_current", "profile": "euro_dcat_ap_3"}, BOTH)
+            resolve_source_profile({"metadata_profile": "profile_a", "profile": "euro_dcat_ap_3"}, BOTH)
 
     def test_an_empty_metadata_profile_next_to_a_profile_is_not_ambiguous(self):
         resolved = resolve_source_profile({"metadata_profile": "", "profile": "euro_dcat_ap_3"}, BOTH)
@@ -169,7 +169,7 @@ class TestLegacyProfileKey:
         assert resolve_source_profile({"profile": "euro_dcat_ap_9"}, BOTH).rdf_profiles == ["euro_dcat_ap_9"]
 
     def test_the_legacy_key_works_on_a_deployment_that_enables_only_one_profile(self):
-        resolved = resolve_source_profile({"profile": "euro_health_dcat_ap_r8"}, ONLY_GDI)
+        resolved = resolve_source_profile({"profile": "euro_health_dcat_ap_r8"}, ONLY_A)
 
         assert resolved.rdf_profiles == R8_CHAIN
 
@@ -191,23 +191,23 @@ class TestDeploymentWithoutMetadataProfiles:
 
     def test_a_named_profile_is_rejected_and_says_none_are_configured(self):
         with pytest.raises(MetadataProfileError, match=r"Enabled: \(none configured\)"):
-            resolve_source_profile({"metadata_profile": "gdi_current"}, self.CONFIG)
+            resolve_source_profile({"metadata_profile": "profile_a"}, self.CONFIG)
 
 
 class TestConfigValues:
     def test_a_list_valued_option_is_read_like_a_string(self):
-        config = {**BOTH, "ckanext.dcat.metadata_profiles": ["healthdcat_r8", "gdi_current"]}
+        config = {**BOTH, "ckanext.dcat.metadata_profiles": ["profile_b", "profile_a"]}
 
-        assert enabled_profiles(config) == ["healthdcat_r8", "gdi_current"]
+        assert enabled_profiles(config) == ["profile_b", "profile_a"]
 
     def test_commas_separate_like_spaces(self):
-        config = {**BOTH, "ckanext.dcat.metadata_profiles": "healthdcat_r8, gdi_current"}
+        config = {**BOTH, "ckanext.dcat.metadata_profiles": "profile_b, profile_a"}
 
-        assert enabled_profiles(config) == ["healthdcat_r8", "gdi_current"]
+        assert enabled_profiles(config) == ["profile_b", "profile_a"]
 
     def test_the_description_names_profile_and_chain(self):
-        resolved = resolve_source_profile({"metadata_profile": "healthdcat_r8"}, BOTH)
+        resolved = resolve_source_profile({"metadata_profile": "profile_b"}, BOTH)
 
         assert resolved.describe() == (
-            "metadata profile 'healthdcat_r8', RDF profiles: euro_health_dcat_ap_r8, from: metadata_profile"
+            "metadata profile 'profile_b', RDF profiles: euro_health_dcat_ap_r8, from: metadata_profile"
         )
