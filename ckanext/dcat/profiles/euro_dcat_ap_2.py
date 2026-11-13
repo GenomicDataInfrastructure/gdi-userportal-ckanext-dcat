@@ -514,12 +514,11 @@ class EuropeanDCATAP2Profile(BaseEuropeanDCATAPProfile):
                     self._add_date_triple(access_service_node, DCT.modified, access_service_dict.get("modified"))
 
 
-                contact_point_dict = access_service_dict.get("contact")
-                if contact_point_dict:
+                # The parser and the repeating subfields give lists of dicts
+                for contact_point_dict in self._as_dict_list(access_service_dict.get("contact")):
                     self._add_contact_to_graph(access_service_node, DCAT.contactPoint, contact_point_dict)
 
-                publisher_dict = access_service_dict.get("publisher")
-                if publisher_dict:
+                for publisher_dict in self._as_dict_list(access_service_dict.get("publisher")):
                     self._add_agent_to_graph(access_service_node, DCT.publisher, publisher_dict)
 
                 for creator_dict in access_service_dict.get("creator", []):
