@@ -40,6 +40,19 @@ PROV = Namespace("http://www.w3.org/ns/prov#")
 DATASET = URIRef("http://example.org/dataset")
 
 
+@pytest.fixture(autouse=True)
+def _dcat_loggers_enabled():
+    """Keep the ckanext.dcat loggers on for the caplog assertions.
+
+    The CKAN pytest plugin loads test.ini with ``logging.config.fileConfig``, whose default
+    ``disable_existing_loggers=True`` disables every logger of a module imported before that,
+    and the warnings these tests look for would never reach caplog.
+    """
+    for name, logger in logging.root.manager.loggerDict.items():
+        if name.startswith("ckanext.dcat") and isinstance(logger, logging.Logger):
+            logger.disabled = False
+
+
 def _field(name, **extra):
     return {"field_name": name, "label": name, **extra}
 
