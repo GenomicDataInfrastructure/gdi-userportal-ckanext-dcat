@@ -1766,3 +1766,47 @@ class TestBlankContactValues:
         (publisher,) = parse(turtle, schema=schema)["publisher"]
 
         assert "email" not in publisher
+
+
+class TestQualityAnnotationMotivation:
+    """oa:motivatedBy has an IRI range: a literal motivation is not read, and an IRI round-trips."""
+
+    ANNOTATION_TTL = PREFIXES + """
+@prefix dqv: <http://www.w3.org/ns/dqv#> .
+@prefix oa: <http://www.w3.org/ns/oa#> .
+<http://example.org/dataset> a dcat:Dataset ;
+    dqv:hasQualityAnnotation [ a oa:Annotation ;
+        oa:hasBody <https://quality.example.org/certificates/1> ;
+        oa:hasTarget <http://example.org/dataset> ;
+        oa:motivatedBy MOTIVATION ] .
+"""
+
+    def test_a_literal_motivation_is_ignored_with_a_warning(self, caplog):
+        turtle = self.ANNOTATION_TTL.replace("MOTIVATION", '"assessed by a person"')
+        with caplog.at_level(logging.WARNING):
+            dataset = parse(turtle, EuropeanHealthDCATAPProfile)
+
+        (annotation,) = dataset["quality_annotation"]
+        assert "motivated_by" not in annotation
+        assert annotation["body"] == "https://quality.example.org/certificates/1"
+        assert any("motivat" in r.getMessage() for r in caplog.records)
+
+    def test_an_iri_motivation_is_read_and_written_back_as_an_iri(self):
+        turtle = self.ANNOTATION_TTL.replace("MOTIVATION", "dqv:qualityAssessment")
+        dataset = parse(turtle, EuropeanHealthDCATAPProfile)
+        assert dataset["quality_annotation"][0]["motivated_by"] == "http://www.w3.org/ns/dqv#qualityAssessment"
+
+        graph = serialize(dataset, EuropeanHealthDCATAPProfile)
+        (annotation,) = values(graph, DQV.hasQualityAnnotation)
+        assert values(graph, OA.motivatedBy, annotation) == [URIRef("http://www.w3.org/ns/dqv#qualityAssessment")]
+
+    def test_a_literal_motivation_is_not_written(self):
+        dataset = {"quality_annotation": [{
+            "body": "https://quality.example.org/certificates/1",
+            "target": "http://example.org/dataset",
+            "motivated_by": "assessed by a person",
+        }]}
+        graph = serialize(dataset, EuropeanHealthDCATAPProfile)
+
+        (annotation,) = values(graph, DQV.hasQualityAnnotation)
+        assert values(graph, OA.motivatedBy, annotation) == []
