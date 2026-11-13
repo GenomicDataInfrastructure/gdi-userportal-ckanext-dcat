@@ -57,7 +57,7 @@ def _get_profiles(profiles):
     "-p",
     "--profiles",
     help=f"RDF profiles to use. If not provided will be read from config, "
-    "if not present there, the default will be used: {DEFAULT_RDF_PROFILES}",
+    f"if not present there, the default will be used: {DEFAULT_RDF_PROFILES}",
 )
 @click.option(
     "-P", "--pretty", is_flag=True, help="Make the output more human readable"
@@ -109,7 +109,7 @@ def consume(input, output, format, profiles, pretty, compat_mode):
     "-p",
     "--profiles",
     help=f"RDF profiles to use. If not provided will be read from config, "
-    "if not present there, the default will be used: {DEFAULT_RDF_PROFILES}",
+    f"if not present there, the default will be used: {DEFAULT_RDF_PROFILES}",
 )
 @click.option(
     "-m", "--compat_mode", is_flag=True, help="Compatibility mode (deprecated)"
@@ -120,7 +120,7 @@ def produce(input, output, format, profiles, compat_mode):
 
     The input datasets can be provided as a path to a file, e.g.:
 
-        ckan dcat consume examples/ckan/ckan_dataset.json
+        ckan dcat produce examples/ckan/ckan_dataset.json
 
     Or be read from stdin:
 
