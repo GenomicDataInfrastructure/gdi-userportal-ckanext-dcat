@@ -1739,3 +1739,30 @@ class TestDataServiceTextsPerLanguage:
         (service,) = services_of(again["resources"][0])
         assert service["title"] == {"en": "Query API", "nl": "Bevragings-API"}
         assert service["description"] == {"en": "Queries the cohort", "nl": "Bevraagt het cohort"}
+
+
+class TestBlankContactValues:
+    """A contact value that is only whitespace is not a value, whatever the schema says."""
+
+    def test_a_whitespace_only_email_is_dropped_when_the_schema_holds_one(self):
+        single_email = [
+            _field(n, **(LISTED if n in ("url", "telephone") else {}))
+            for n in ("uri", "name", "name_translated", "email", "url", "type", "publisher_note", *CONTACT_POINT)
+        ]
+        schema = {
+            **SCHEMA,
+            "dataset_fields": [
+                _field("publisher", repeating_subfields=single_email) if f["field_name"] == "publisher" else f
+                for f in SCHEMA["dataset_fields"]
+            ],
+        }
+        turtle = PREFIXES + """
+@prefix cv: <http://data.europa.eu/m8g/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+<http://example.org/dataset> a dcat:Dataset ; dct:publisher <http://example.org/publisher> .
+<http://example.org/publisher> a foaf:Agent ;
+    cv:contactPoint [ a cv:ContactPoint ; cv:email " " ] .
+"""
+        (publisher,) = parse(turtle, schema=schema)["publisher"]
+
+        assert "email" not in publisher
