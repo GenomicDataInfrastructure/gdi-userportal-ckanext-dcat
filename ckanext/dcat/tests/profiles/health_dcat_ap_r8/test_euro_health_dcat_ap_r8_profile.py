@@ -275,7 +275,7 @@ class TestNotAnR8Property:
 
 
 class TestSingleValuedFields:
-    """Q3: the field keeps one value and a warning says when others are dropped (ADR 0001)."""
+    """The field keeps one value (the first), and a warning says when others are dropped."""
 
     def test_several_identifiers_give_a_warning_and_one_value(self, caplog):
         with caplog.at_level(logging.WARNING):

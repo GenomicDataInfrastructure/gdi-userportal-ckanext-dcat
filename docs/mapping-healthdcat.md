@@ -100,8 +100,8 @@ example) as it is. There is no crosswalk from those to the new vocabularies.
 R8 allows several values for `dcat_type` (`dct:type`) and the landing page (`url`,
 `dcat:landingPage`), and the R8 pack makes both lists: the profile reads every value, sorted, and
 writes all of them. A schema that holds one value in them (`gdi_current` listed first) keeps the
-first, with a warning. `identifier` stays single-valued (ADR 0001, Q3): the first value is kept and a
-warning logged.
+first, with a warning. `identifier` stays single-valued: the first value is kept and a warning is logged,
+because consumers of the catalogue read it as one string.
 
 The same goes for the properties of a distribution that R8 gives `0..*`: the access URL
 (`resources[].access_url`, `dcat:accessURL`) and the download URL (`resources[].download_url`,

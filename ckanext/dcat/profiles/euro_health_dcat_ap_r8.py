@@ -44,9 +44,8 @@ R8_AGENTS = (
     ("hdab_coordinator", HEALTHDCATAP.hdabCoordinator),
 )
 
-# Subfields R8 adds to the contact point of an agent. Parsed values for a subfield the
-# loaded schema does not have are dropped: with gdi_current listed first its narrower
-# definition of the agent fields wins.
+# Subfields R8 adds to the contact point of an agent. A parsed value for a subfield the
+# loaded schema does not define is dropped, so the parsed dataset validates against it.
 CONTACT_POINT_SUBFIELDS = ("telephone", "opening_hours", "special_opening_hours")
 AGENT_FIELDS = ("publisher", "hdab", "custodian", "hdab_coordinator")
 
@@ -58,7 +57,7 @@ LEGACY_AGENT_PREDICATES = (
     HEALTHDCATAP.publisherType,
 )
 
-# R8 types what these properties point to (HealthDCAT-AP R8, ranges/range.ttl). Free text
+# R8 types what these properties point to (the range shapes of HealthDCAT-AP Release 8). Free text
 # cannot have a class, so it becomes a typed node holding the text in the given property.
 # An IRI gets the class too, where the data behind it usually carries none: the dpv
 # vocabulary is not imported by R8's validation, and a coding system is a dct:Standard.
@@ -75,7 +74,7 @@ TYPED_OBJECTS = (
     (DPV.hasPurpose, DPV.Purpose, DCT.description, True),
 )
 
-# The controlled vocabularies R8 requires (gap analysis section 4), all under one host.
+# The controlled vocabularies R8 requires, all under one host.
 # A bare authority code of such a vocabulary is written as its IRI; a value that is already
 # an IRI (Wikidata and ADMS ones included) or is not shaped like a code is left alone.
 HDEU_AUTHORITY = "https://hdeu-dcat.data.health.europa.eu/resource/authority"
@@ -94,27 +93,27 @@ AGENT_PREDICATES = (DCT.publisher, DCT.creator, HEALTHDCATAP.hdab, GEODCATAP.cus
 
 # R8 allows several values where the CKAN field holds one. When the loaded schema keeps the field
 # single-valued (`identifier` always; `dcat_type` and `url` unless the schema lists them, see LISTABLE),
-# the first value is kept and the others are dropped, with a warning (ADR 0001, Q3).
+# the first value is kept and the others are dropped, with a warning. `identifier` stays
+# single-valued by decision: consumers of the catalogue read it as one string.
 SINGLE_VALUED = (
     (DCT.identifier, "identifier"),
     (DCT.type, "dcat_type"),
     (DCAT.landingPage, "url"),
 )
-# R8 gives these 0..*: lists when the loaded schema says so (the R8 pack), single-valued otherwise.
+# R8 gives these 0..*: lists when the loaded schema declares them as multiple values, single-valued otherwise.
 LISTABLE = (
     ("url", DCAT.landingPage),
     ("dcat_type", DCT.type),
 )
 
-# The same for these properties of a distribution (and for its rights, a list of statements with an
-# optional IRI and a label per language).
+# Distribution properties that R8 gives 0..*. Rights are a separate case, see _distribution_field_is_list.
 LISTABLE_DISTRIBUTION = (
     ("access_url", DCAT.accessURL),
     ("download_url", DCAT.downloadURL),
 )
 
 # R8 gives the title (1..*), the description and the endpoint description (0..*) of a data service one
-# value per language: language maps when the loaded schema says so (the R8 pack), a single text otherwise.
+# value per language: language maps when the loaded schema declares them as such, a single text otherwise.
 MULTILINGUAL_SERVICE_FIELDS = (
     ("title", DCT.title),
     ("description", DCT.description),
@@ -274,7 +273,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
             self.g.remove((annotation_ref, RDF.type, OA.Annotation))
             self.g.add((annotation_ref, RDF.type, DQV.QualityCertificate))
 
-    # --- agents: every health agent has exactly one cv:contactPoint ---------------------
+    # --- agents: the contact data of an agent is one cv:contactPoint ---------------------
 
     def _agents_details(self, subject, predicate):
         """
@@ -521,7 +520,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
         return bool(field) and "fluent" in f"{field.get('preset', '')} {field.get('validators', '')}"
 
     def _parse_access_service_details(self, dataset_dict):
-        """The documentation of a data service, and its title, description and endpoint description in every language."""
+        """Reads the documentation of each data service, and its title, description and endpoint description per language."""
         multilingual = [(key, predicate) for key, predicate in MULTILINGUAL_SERVICE_FIELDS if self._service_field_is_multilingual(key)]
         for resource_dict in dataset_dict.get("resources", []):
             services = resource_dict.get("access_services")
@@ -545,12 +544,10 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
             if found and is_json:
                 resource_dict["access_services"] = json.dumps(services)
 
-    # --- access URL, download URL and rights of a distribution: 0..* ---------------------------
-
     # --- the checksum of a distribution: an entity with an algorithm and a value ---------------
 
     def _checksum_is_an_entity(self):
-        """The R8 schema has a ``checksum`` entity; the gdi_current one has the plain fields ``hash`` and ``hash_algorithm``."""
+        """Whether the schema has a ``checksum`` entity (R8) rather than the plain ``hash`` and ``hash_algorithm`` fields."""
         return bool(self._schema_resource_field("checksum"))
 
     def _parse_checksums(self, dataset_dict):
@@ -776,7 +773,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
                     self._warn_about_dropped_values(relation_ref, predicate, f"qualified_relation.{field}")
 
     def _drop_what_the_schema_has_no_subfield_for(self, dataset_dict):
-        """With gdi_current listed first its narrower agent and data service fields win; keep the dict valid."""
+        """Drops the subfields that the loaded schema does not define, so the parsed dataset validates against it."""
         if not self._dataset_schema:
             return
 
@@ -802,7 +799,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
     def _contact_url_is_single(self):
         """R8's vcard:Kind has at most one vcard:hasURL, so the url of a contact is one value.
 
-        A schema that still lists the URLs (gdi_current listed first) keeps its list.
+        A schema that lists several URLs for a contact keeps its list.
         """
         field = self._schema_field("contact")
         url = next((f for f in (field or {}).get("repeating_subfields", []) if f["field_name"] == "url"), None)
@@ -832,6 +829,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
                 contact["url"] = self._single_contact_url(contact)
 
     def _add_contact_to_graph(self, subject, predicate, contact):
+        """Writes a contact, collapsing its url list to one value when the schema holds one."""
         if isinstance(contact, dict) and "url" in contact and self._contact_url_is_single():
             contact = {**contact, "url": self._single_contact_url(contact)}
         super()._add_contact_to_graph(subject, predicate, contact)
@@ -879,7 +877,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
                 dataset_dict[key] = values
 
     def _add_the_listed_fields(self, dataset_ref, dataset_dict, listed):
-        """Writes every landing page and type; the shared writer was given none of them."""
+        """Writes every landing page and type, which the shared writer does not get."""
         for key, predicate in LISTABLE:
             if key not in listed:
                 continue
@@ -937,9 +935,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
     # --- text per language: every value is kept --------------------------------------------
 
     def _object_value_multilingual(self, subject, predicate):
-        """As the shared one, but values in the same language (two provenance statements, say) are all kept.
-
-        They are joined, sorted, with a blank line, instead of the last one winning.
+        """Text per language where every value is kept: values in one language are joined, sorted, with a blank line.
         """
         found = {}
         for value in self.g.objects(subject, predicate):
@@ -978,8 +974,8 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
     def _relationship_details(self, subject, predicate):
         """A dcat:Relationship has one or more dct:relation and dcat:hadRole in R8.
 
-        A subfield the loaded schema holds one value in (gdi_current listed first) keeps the first
-        value, with the warning of the dropped values.
+        A subfield that the loaded schema holds one value in keeps the first value, with a warning
+        for the dropped values.
         """
         relations = []
         for node in self.g.objects(subject, predicate):
@@ -993,7 +989,7 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
         return relations
 
     def _add_relationship(self, dataset_ref, dataset_dict, relation_key, rdf_predicate):
-        """Writes every relation and role of each relationship, not only the first."""
+        """Writes every relation and role of each relationship."""
         for relation in self._as_list_of_dicts(dataset_dict.get(relation_key)):
             if not any(relation.values()):
                 continue
