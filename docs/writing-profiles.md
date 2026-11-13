@@ -6,15 +6,16 @@ Conversely, the `graph_from_dataset()` will be called when requesting an RDF rep
 
 Custom profiles should always extend the `ckanext.dcat.profiles.RDFProfile` class. This class has several helper
 functions to make getting metadata from the RDF graph easier. These include helpers for getting fields for FOAF and VCard entities like the ones
-used to define publishers or contact points. Check the source code of `ckanex.dcat.profiles.base.py` to see what is available.
+used to define publishers or contact points. Check the source code of `ckanext/dcat/profiles/base.py` to see what is available.
 
 Profiles can extend other profiles to avoid repeating rules, or can be completely independent.
 
-The following example shows a complete example of a profile built on top of the European DCAT-AP profile (`euro_dcat_ap`):
+The following profile reads the spatial label of a dataset and writes it back. It is meant to run after a DCAT-AP profile, so that the profiles that run before it have already filled the dataset dict:
 
 ```python
+from rdflib import BNode, Literal, URIRef
+from rdflib.namespace import Namespace, RDF, RDFS
 
-from rdflib.namespace import Namespace
 from ckanext.dcat.profiles import RDFProfile
 
 DCT = Namespace("http://purl.org/dc/terms/")
@@ -22,9 +23,7 @@ DCT = Namespace("http://purl.org/dc/terms/")
 
 class SwedishDCATAPProfile(RDFProfile):
     '''
-    An RDF profile for the Swedish DCAT-AP recommendation for data portals
-
-    It requires the European DCAT-AP profile (`euro_dcat_ap`)
+    An RDF profile for the Swedish DCAT-AP recommendation for data portals.
     '''
 
     def parse_dataset(self, dataset_dict, dataset_ref):
@@ -57,16 +56,16 @@ class SwedishDCATAPProfile(RDFProfile):
             g.add((spatial_ref, RDFS.label, Literal(spatial_text)))
 ```
 
-Note how the dataset dict is passed between profiles so it can be further tweaked.
+The dataset dict is passed from one profile to the next, so a profile can change what the profiles after it receive.
 
-Extensions define their available profiles using the `ckan.rdf.profiles` entrypoint in the `setup.py` file, as in this [example](https://github.com/ckan/ckanext-dcat/blob/cc5fcc7be0be62491301db719ce597aec7c684b0/setup.py#L37:L38) from this same extension:
+A profile is registered in the `ckan.rdf.profiles` entry-point group of the `pyproject.toml` of its extension:
 
-    [ckan.rdf.profiles]
-    euro_dcat_ap=ckanext.dcat.profiles:EuropeanDCATAPProfile
-    euro_dcat_ap_2=ckanext.dcat.profiles:EuropeanDCATAP2Profile
-    euro_dcat_ap_3=ckanext.dcat.profiles:EuropeanDCATAP3Profile
-    euro_dcat_ap_scheming=ckanext.dcat.profiles:EuropeanDCATAPSchemingProfile
-    schemaorg=ckanext.dcat.profiles:SchemaOrgProfile
+```toml
+[project.entry-points."ckan.rdf.profiles"]
+swedish_dcat_ap = "my_extension.profiles:SwedishDCATAPProfile"
+```
+
+The profiles this extension registers are in the same group of its `pyproject.toml`.
 
 
 ## Internals
@@ -80,7 +79,6 @@ and create CKAN datasets and resources, as dictionaries that can be passed to [`
 Here is a quick overview of how it works:
 
 ```python
-
 from ckanext.dcat.processors import RDFParser, RDFParserException
 
 parser = RDFParser()
@@ -92,10 +90,10 @@ with open('datasets.rdf', 'r') as f:
         parser.parse(f.read())
 
         for dataset in parser.datasets():
-            print('Got dataset with title {0}'.format(dataset['title'])
+            print('Got dataset with title {0}'.format(dataset['title']))
 
-    except RDFParserException, e:
-        print ('Error parsing the RDF file: {0}'.format(e))
+    except RDFParserException as e:
+        print('Error parsing the RDF file: {0}'.format(e))
 
 # Parsing a remote JSON-LD file
 
@@ -103,17 +101,16 @@ import requests
 
 parser = RDFParser()
 
-content = requests.get('https://some.catalog.org/datasets.jsonld').content
+content = requests.get('https://some.catalog.org/datasets.jsonld').text
 
 try:
     parser.parse(content, _format='json-ld')
 
     for dataset in parser.datasets():
-        print('Got dataset with title {0}'.format(dataset['title'])
+        print('Got dataset with title {0}'.format(dataset['title']))
 
-except RDFParserException, e:
-    print ('Error parsing the RDF file: {0}'.format(e))
-
+except RDFParserException as e:
+    print('Error parsing the RDF file: {0}'.format(e))
 ```
 
 The parser is implemented using [RDFLib](https://rdflib.readthedocs.org/), a Python library for working with RDF. Any
@@ -128,6 +125,7 @@ formats from CKAN dataset dicts, like the ones returned by [`package_show`](http
 Here is an example of how to use it:
 
 ```python
+from ckan.plugins.toolkit import get_action
 
 from ckanext.dcat.processors import RDFSerializer
 
@@ -135,35 +133,32 @@ from ckanext.dcat.processors import RDFSerializer
 
 dataset = get_action('package_show')({}, {'id': 'my-dataset'})
 
-serializer = RDFserializer()
+serializer = RDFSerializer()
 
 dataset_ttl = serializer.serialize_dataset(dataset, _format='turtle')
 
 
 # Serializing the whole catalog (or rather part of it)
 
-datasets = get_action('package_search')({}, {'q': '*:*', 'rows': 50})
+datasets = get_action('package_search')({}, {'q': '*:*', 'rows': 50})['results']
 
-serializer = RDFserializer()
+catalog_xml = RDFSerializer().serialize_catalog({'title': 'My catalog'},
+                                                dataset_dicts=datasets,
+                                                _format='xml')
 
-catalog_xml = serializer.serialize_catalog({'title': 'My catalog'},
-                                           dataset_dicts=datasets,
-                                           _format='xml')
-
-# Creating and RDFLib graph from a single dataset
+# Creating an RDFLib graph from a single dataset
 
 dataset = get_action('package_show')({}, {'id': 'my-dataset'})
 
-serializer = RDFserializer()
+serializer = RDFSerializer()
 
 dataset_reference = serializer.graph_from_dataset(dataset)
 
 # serializer.g now contains the full dataset graph, an RDFLib Graph class
-
 ```
 
 The serializer uses customizable [profiles](profiles.md) to generate an RDF graph (an [RDFLib Graph class](https://rdflib.readthedocs.org/en/latest/apidocs/rdflib.html#rdflib.graph.Graph)).
-By default these use the [mapping](mapping.md) described in the previous section.
+By default these use the [mapping](mapping.md).
 
 In some cases, if the default CKAN field that maps to a DCAT property is not present, some other fallback
 values will be used instead. For instance, if the `contact_email` field is not found, `maintainer_email`
@@ -181,11 +176,10 @@ the following values will be used for `dct:accrualPeriodicity`:
     {
         "name": "my-dataset",
         "extras": [
-            {"key": "frequency", "value": "monthly"},
-        ]
+            {"key": "frequency", "value": "monthly"}
+        ],
         ...
     }
 
 Once the dataset graph has been obtained, this is serialized into a text format using [RDFLib](https://rdflib.readthedocs.org/),
 so any format it supports can be obtained (common formats are 'xml', 'turtle' or 'json-ld').
-
