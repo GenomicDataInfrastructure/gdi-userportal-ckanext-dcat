@@ -16,8 +16,8 @@ from and written to RDF. Two health profiles exist:
 The R8 profile builds on the first and overrides only where R8 differs, so a row is the same for
 both unless its "R8" column says otherwise. A deployment enables one or both packs and a harvest
 source can pick one; see `docs/metadata-profiles.md` of the
-`gdi-userportal-ckan-docker` repository. The full comparison with R8, property by property, is in
-the [R8 gap analysis](healthdcat-ap-r8-gap-analysis.md).
+`gdi-userportal-ckan-docker` repository. The open differences from R8 are in
+the [Release 8 note](healthdcat-ap-r8-gap-analysis.md).
 
 Repeated values are written as repeated triples, not as an `rdf:List`.
 
@@ -34,7 +34,7 @@ Repeated values are written as repeated triples, not as an `rdf:List`.
 | `personal_data` | `dpv:hasPersonalData` | list | An IRI. | The node is typed `dpv:PersonalData`. |
 | `purpose` | `dpv:hasPurpose` | list | An IRI or a literal. | The node is typed `dpv:Purpose`. |
 | `population_coverage` | `healthdcatap:populationCoverage` | text | Free text; one value per language with the multilingual schema. | Same. |
-| `min_typical_age`, `max_typical_age`, `number_of_records`, `number_of_unique_individuals` | `healthdcatap:minTypicalAge`, `maxTypicalAge`, `numberOfRecords`, `numberOfUniqueIndividuals` | integer | Written as `xsd:nonNegativeInteger`. | Same. |
+| `min_typical_age`, `max_typical_age`, `number_of_records`, `number_of_unique_individuals` | `healthdcatap:minTypicalAge`, `maxTypicalAge`, `numberOfRecords`, `numberOfUniqueIndividuals` | integer | Written as `xsd:nonNegativeInteger`; a value that is not one is written as a plain literal. | Same. |
 | `quality_annotation` | `dqv:hasQualityAnnotation` | list of `body`, `target`, `motivated_by` | An `oa:Annotation` with `oa:hasBody`, `oa:hasTarget`, `oa:motivatedBy`. Parsing keeps an annotation only when its body and target are `http(s)` IRIs. | The node is typed `dqv:QualityCertificate`, the range R8 requires. |
 | `retention_period` | `healthdcatap:retentionPeriod` | list of `start`, `end` | A `dct:PeriodOfTime` with `dcat:startDate` and `dcat:endDate`. A distribution carries its own, as `resources[].retention_period`. | Same. |
 | `hdab` | `healthdcatap:hdab` | list of agents | See agents below. | See agents below. |
@@ -64,12 +64,12 @@ Fields only R8 has (`healthdcat_r8` pack):
 
 - **`euro_health_dcat_ap`**: a flat `foaf:Agent` with `vcard:hasEmail` and `foaf:homepage`, and the
   publisher note and type as `healthdcatap:publisherNote` and `healthdcatap:publisherType`.
-- **`euro_health_dcat_ap_r8`**: every health agent has one `cv:ContactPoint` holding the email
+- **`euro_health_dcat_ap_r8`**: an agent with contact data has one `cv:ContactPoint` holding the email
   (`cv:email`), the contact page (`cv:contactPage`), the telephone (`cv:telephone`) and the opening
   hours (`cv:openingHours`, `cv:specialOpeningHoursSpecification`, as `time:TemporalEntity`, each
   with a `dct:description` in every language and one or more `cv:frequency`, a list). The
   publisher note is written as `dct:description`. The email, the contact page and the telephone are
-  `0..n` on a contact point, so `email`, `url` and `telephone` are lists and every value is read and
+  `0..n` on a contact point, so, where the schema declares them as multiple values, `email`, `url` and `telephone` are lists and every value is read and
   written (sorted, so a re-parse is stable). The flat terms of the other profile are still read, for
   agents that carry them, and are not written. When R8 gives an agent several contact points only the
   first is read, with a warning. A schema that holds one value in these subfields (the `gdi_current`

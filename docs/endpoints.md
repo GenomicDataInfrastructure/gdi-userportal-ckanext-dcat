@@ -42,6 +42,8 @@ RDF representations will be advertised using `<link rel="alternate">` tags on th
 </head>
 ```
 
+Dataset series have the same endpoints under `/dataset_series/{dataset-id}.{format}`.
+
 Check the [RDF DCAT Serializer](writing-profiles.md#rdf-dcat-serializer) section for more details about how these are generated and how to customize the output using [profiles](profiles.md#profiles).
 
 
@@ -64,7 +66,7 @@ This endpoint base path can be customized if necessary using the [`ckanext.dcat.
 
 The custom endpoint **must** start with a forward slash (`/`) and contain the `{_format}` placeholder.
 
-As described previously, the extension will determine the RDF serialization format returned.
+The extension determines the RDF serialization format from the extension, as for the dataset endpoint.
 
 * http://demo.ckan.org/catalog.rdf
 * http://demo.ckan.org/catalog.xml
@@ -103,7 +105,7 @@ The catalog endpoint also supports a `modified_since` parameter to restrict data
 
 It is possible to specify the profile(s) to use for the serialization using the `profiles` parameter:
 
-    http://demo.ckan.org/catalog.xml?profiles=euro_dcat_ap,sweden_dcat_ap
+    http://demo.ckan.org/catalog.xml?profiles=euro_dcat_ap_2,euro_dcat_ap_scheming
 
 To filter the output, the catalog endpoint supports the `q` and `fq` parameters to specify a [search query](https://solr.apache.org/guide/solr/latest/query-guide/dismax-query-parser.html#q-parameter) or [filter query](https://solr.apache.org/guide/solr/latest/query-guide/common-query-parameters.html#fq-filter-query-parameter):
 

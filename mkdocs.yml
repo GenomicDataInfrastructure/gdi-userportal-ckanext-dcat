@@ -73,6 +73,8 @@ nav:
     - Dataset Series: 'dataset-series.md'
     - Base profiles: 'profiles.md'
     - Application profiles: 'application-profiles.md'
+    - HealthDCAT-AP mapping: 'mapping-healthdcat.md'
+    - DCAT-AP-NL mapping: 'mapping-nl.md'
     - Writing profiles: 'writing-profiles.md'
   - Other features:
     - 'harvester.md'
