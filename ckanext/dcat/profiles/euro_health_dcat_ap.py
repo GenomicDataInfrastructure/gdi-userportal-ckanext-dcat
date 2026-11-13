@@ -1,3 +1,5 @@
+import logging
+
 from rdflib import XSD, Literal, URIRef, RDF, BNode, DCAT, RDFS
 from rdflib.namespace import Namespace
 from rdflib.namespace import DCTERMS as DCT
@@ -5,6 +7,8 @@ from .base import CleanedURIRef
 from ckanext.dcat.utils import resource_uri
 from ckanext.dcat.profiles.base import URIRefOrLiteral
 from ckanext.dcat.profiles.euro_dcat_ap_3 import EuropeanDCATAP3Profile
+
+log = logging.getLogger(__name__)
 
 # The HealthDCAT-AP namespace used by the profiles in this module.
 HEALTHDCATAP = Namespace("http://healthdataportal.eu/ns/health#")
@@ -164,10 +168,16 @@ class EuropeanHealthDCATAPProfile(EuropeanDCATAP3Profile):
             if "body" not in annotation_dict or "target" not in annotation_dict:
                 continue
 
-            # Get the motivation (URI or literal)
-            motivation = self._object_value(annotation_ref, OA.motivatedBy)
-            if motivation:
-                annotation_dict["motivated_by"] = motivation
+            # The motivation is an IRI (the range of oa:motivatedBy). A literal is ignored.
+            for motivation in self.g.objects(annotation_ref, OA.motivatedBy):
+                if isinstance(motivation, URIRef) and str(motivation).startswith(("http://", "https://")):
+                    annotation_dict["motivated_by"] = str(motivation)
+                    break
+                log.warning(
+                    "%s has oa:motivatedBy %r, which is not an IRI; it is not read",
+                    annotation_ref,
+                    str(motivation),
+                )
 
             quality_annotation.append(annotation_dict)
 
@@ -316,7 +326,7 @@ class EuropeanHealthDCATAPProfile(EuropeanDCATAP3Profile):
     def _add_quality_annotation(self, dataset_dict, dataset_ref):
         """
         Serialize quality_annotation entries into RDF as DQV.QualityAnnotations.
-        Only URI-based body, target, and motivation values are supported.
+        body, target and motivated_by are written only when they are http(s) IRIs.
         """
         quality_annotation = self._get_dict_value(dataset_dict, "quality_annotation")
 
