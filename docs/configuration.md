@@ -21,7 +21,7 @@ RDF profiles to use when parsing and serializing. See [Profiles](profiles.md#pro
 Example:
 
 ```
-ckanext.dcat.metadata_profiles = healthdcat_r8 gdi_current
+ckanext.dcat.metadata_profiles = profile_a profile_b
 ```
 
 Default value: none
@@ -32,9 +32,8 @@ commas. A harvest source selects one of them with its `metadata_profile` setting
 deployment has no metadata profiles.
 
 Each enabled profile lists its RDF profiles, in order, in
-`ckanext.dcat.metadata_profiles.<name>.rdf_profiles`. The deployment that provides the profiles
-writes these options; the GDI User Portal profile packs in `ckanext-gdi-userportal` do this at
-container start.
+`ckanext.dcat.metadata_profiles.<name>.rdf_profiles`. The deployment sets these options; this
+extension does not write them.
 
 
 #### ckanext.dcat.metadata_profiles.main
@@ -42,7 +41,7 @@ container start.
 Example:
 
 ```
-ckanext.dcat.metadata_profiles.main = gdi_current
+ckanext.dcat.metadata_profiles.main = profile_a
 ```
 
 Default value: the first of `ckanext.dcat.metadata_profiles`
@@ -56,7 +55,7 @@ The metadata profile a harvest source uses when its own setting names none. It m
 Example:
 
 ```
-ckanext.dcat.metadata_profiles.gdi_current.rdf_profiles = euro_dcat_ap_3 euro_dcat_ap_scheming
+ckanext.dcat.metadata_profiles.profile_a.rdf_profiles = euro_dcat_ap_3 euro_dcat_ap_scheming
 ```
 
 The RDF profiles of the metadata profile `<name>`, in the order they run. A metadata profile
