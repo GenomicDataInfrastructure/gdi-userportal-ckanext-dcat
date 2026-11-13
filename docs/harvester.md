@@ -28,7 +28,7 @@ when it runs. A source with neither key uses the main metadata profile
 [`ckanext.dcat.rdf.profiles`](configuration.md#ckanextdcatrdfprofiles) when no metadata profiles
 are configured.
 
-    {"metadata_profile": "healthdcat_r8"}
+    {"metadata_profile": "profile_a"}
 
 ### Maximum file size
 

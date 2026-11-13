@@ -24,8 +24,8 @@ BOTH = {
     "ckanext.dcat.rdf.profiles": "fairdatapoint_dcat_ap euro_dcat_ap_nl",
 }
 
-# What a deployment with only gdi_current enables. The ini keeps the key of the retired
-# pack from an earlier start, which must not make it enabled.
+# A deployment that enables one metadata profile. The config still holds the RDF profile
+# option of a second one, which must not make it enabled.
 ONLY_GDI = {
     "ckanext.dcat.metadata_profiles": "gdi_current",
     "ckanext.dcat.metadata_profiles.main": "gdi_current",

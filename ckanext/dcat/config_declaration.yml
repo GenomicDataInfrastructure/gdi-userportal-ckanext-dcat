@@ -16,13 +16,13 @@ groups:
           `ckanext.dcat.metadata_profiles.<name>.rdf_profiles` (the ordered RDF profiles of each
           one). A harvest source selects one with the `metadata_profile` key of its config. Leave
           unset on a deployment without metadata profiles.
-        example: 'healthdcat_r8 gdi_current'
+        example: 'profile_a profile_b'
 
       - key: ckanext.dcat.metadata_profiles.main
         description: |
           The main metadata profile: the one a harvest source gets when its config names none.
           Must be one of `ckanext.dcat.metadata_profiles`; defaults to the first of them.
-        example: 'gdi_current'
+        example: 'profile_a'
 
       - key: ckanext.dcat.translate_keys
         type: bool
