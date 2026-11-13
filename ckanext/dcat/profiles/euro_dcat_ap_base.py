@@ -317,7 +317,7 @@ class BaseEuropeanDCATAPProfile(RDFProfile):
             resource_dict["format"] = imt
 
         # Size
-        size = self._object_value_int(distribution, DCAT.byteSize)
+        size = self._object_value_int(distribution, DCAT.byteSize, keep_invalid=True)
         if size is not None:
             resource_dict["size"] = size
 

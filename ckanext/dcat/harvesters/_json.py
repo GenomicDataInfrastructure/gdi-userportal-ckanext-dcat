@@ -169,8 +169,10 @@ class DCATJSONHarvester(DCATHarvester):
                 package_id=guid_to_package_id[guid],
                 extras=[HarvestObjectExtra(key='status', value='delete')])
             ids.append(obj.id)
+            # Only the objects of this source: another source can hold the same guid
             model.Session.query(HarvestObject).\
                 filter_by(guid=guid).\
+                filter(HarvestObject.harvest_source_id == harvest_job.source.id).\
                 update({'current': False}, False)
             obj.save()
 
@@ -211,6 +213,7 @@ class DCATJSONHarvester(DCATHarvester):
         # Get the last harvested object (if any)
         previous_object = model.Session.query(HarvestObject) \
             .filter(HarvestObject.guid == harvest_object.guid) \
+            .filter(HarvestObject.harvest_source_id == harvest_object.harvest_source_id) \
             .filter(HarvestObject.current == True) \
             .first()
 
@@ -230,7 +233,14 @@ class DCATJSONHarvester(DCATHarvester):
         # copy across resource ids from the existing dataset, otherwise they'll
         # be recreated with new ids
         if status == 'change':
-            existing_dataset = self._get_existing_dataset(harvest_object.guid)
+            existing_dataset = None
+            if harvest_object.package_id:
+                # the package this source imported, not one another source made for the same guid
+                try:
+                    existing_dataset = p.toolkit.get_action('package_show')(
+                        {}, {'id': harvest_object.package_id})
+                except p.toolkit.ObjectNotFound:
+                    pass
             if existing_dataset:
                 copy_across_resource_ids(existing_dataset, package_dict)
 
