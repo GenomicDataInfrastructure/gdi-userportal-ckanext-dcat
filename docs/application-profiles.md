@@ -98,8 +98,7 @@ The profile has no settings of its own.
 
 `euro_health_dcat_ap_r8` implements HealthDCAT-AP Release 8 on top of `euro_health_dcat_ap`. It is
 enabled by listing it in place of `euro_health_dcat_ap`. The field mapping is in
-[mapping-healthdcat.md](mapping-healthdcat.md); the open differences from the specification are in
-the [Release 8 note](healthdcat-ap-r8-gap-analysis.md).
+[mapping-healthdcat.md](mapping-healthdcat.md).
 
 ### Field Mapping
 
