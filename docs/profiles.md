@@ -23,6 +23,15 @@ Sites that want to support a particular version of the DCAT-AP can enable a spec
 * [DCAT-AP v2.1.0](https://joinup.ec.europa.eu/collection/semantic-interoperability-community-semic/solution/dcat-application-profile-data-portals-europe/release/210): `euro_dcat_ap_2`
 * [DCAT-AP v1.1.1](https://joinup.ec.europa.eu/asset/dcat_application_profile/asset_release/dcat-ap-v11): `euro_dcat_ap`
 
+Other profiles registered by the extension:
+
+* `euro_dcat_ap_scheming`: the DCAT-AP fields stored in ckanext-scheming fields, see [Schemas](getting-started.md#schemas).
+* `euro_dcat_ap_nl`: the properties of DCAT-AP-NL 3.0 on top of DCAT-AP 3, see [Application profiles](application-profiles.md#dcat-ap-nl).
+* `euro_health_dcat_ap` and `euro_health_dcat_ap_r8`: HealthDCAT-AP, see [Application profiles](application-profiles.md#healthdcat-ap).
+* `croissant` and `schemaorg`: see [Croissant ML](croissant.md) and [Google Dataset Search](google-dataset-search.md).
+
+The registered names are the entry points of the `ckan.rdf.profiles` group in `pyproject.toml`.
+
 This plugin also contains a profile to serialize a CKAN dataset to a [schema.org Dataset](http://schema.org/Dataset) called `schemaorg`. This is especially useful to provide [JSON-LD structured data](google-dataset-search.md).
 
 To define which profiles to use you can:
@@ -31,16 +40,16 @@ To define which profiles to use you can:
 1. Set the [`ckanext.dcat.rdf.profiles`](configuration.md#ckanextdcatrdfprofiles) configuration option on your CKAN configuration file:
 
 ```ini
-ckanext.dcat.rdf.profiles = euro_dcat_ap sweden_dcat_ap
+ckanext.dcat.rdf.profiles = euro_dcat_ap_2 euro_dcat_ap_scheming
 ```
 
 2. When initializing a parser or serializer class, pass the profiles to be used as a parameter, eg:
 
 ```python
 
-parser = RDFParser(profiles=['euro_dcat_ap', 'sweden_dcat_ap'])
+parser = RDFParser(profiles=['euro_dcat_ap_2', 'euro_dcat_ap_scheming'])
 
-serializer = RDFSerializer(profiles=['euro_dcat_ap', 'sweden_dcat_ap'])
+serializer = RDFSerializer(profiles=['euro_dcat_ap_2', 'euro_dcat_ap_scheming'])
 ```
 
 Note that in both cases the order in which you define them is important, as it will be the one that the profiles will be run on.
