@@ -286,6 +286,7 @@ class TestImportStage(object):
 
     class MockHarvestObject(object):
         guid = 'test_guid'
+        harvest_source_id = 'test_id'
         content = TestDCATJSONHarvestFunctional.json_content_invalid_tags
 
         class MockStatus(object):

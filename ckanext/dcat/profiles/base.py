@@ -316,21 +316,26 @@ class RDFProfile(object):
 
         return object_value
 
-    def _object_value_int(self, subject, predicate):
+    def _object_value_int(self, subject, predicate, keep_invalid=False):
         """
         Given a subject and a predicate, returns the value of the object as an
         integer
 
         Both subject and predicate must be rdflib URIRef or BNode objects
 
-        If the value can not be parsed as intger, returns None
+        If the value can not be parsed as an integer, returns None. With
+        ``keep_invalid`` it returns the value as it is instead of losing it: the
+        schema then rejects it ("Invalid integer") and a harvester that imports
+        the dataset without the invalid value
+        (ckanext.dcat.harvesters.invalid_values) reports which value was left out.
         """
         object_value = self._object_value(subject, predicate)
         if object_value:
             try:
                 return int(float(object_value))
-            except ValueError:
-                pass
+            except (ValueError, OverflowError):
+                if keep_invalid:
+                    return object_value
         return None
 
     def _object_value_int_list(self, subject, predicate):
