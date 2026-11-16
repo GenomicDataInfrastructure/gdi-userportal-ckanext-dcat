@@ -266,6 +266,10 @@ class RDFProfile(object):
                     fallback = str(o)
             elif len(list(self.g.objects(o, RDFS.label))):
                 return str(next(self.g.objects(o, RDFS.label)))
+            elif isinstance(o, BNode):
+                text = self._blank_node_text(o)
+                if text:
+                    return text
             else:
                 return str(o)
         return fallback
@@ -372,9 +376,35 @@ class RDFProfile(object):
 
         Both subject and predicate must be rdflib URIRef or BNode  objects
 
+        A blank node gives its text (see `_blank_node_text`), and nothing if it has none:
+        its internal id says nothing to a reader.
+
         If no values found, returns an empty list
         """
-        return [str(o) for o in self.g.objects(subject, predicate)]
+        values = []
+        for o in self.g.objects(subject, predicate):
+            if isinstance(o, BNode):
+                text = self._blank_node_text(o)
+                if text:
+                    values.append(text)
+            else:
+                values.append(str(o))
+        return values
+
+    def _blank_node_text(self, node):
+        """
+        The text a blank node stands for: its label, preferred label, title, notation
+        or description, in that order, in the default language if there is one.
+        Returns an empty string for a node without any of them.
+        """
+        for predicate in (RDFS.label, SKOS.prefLabel, DCT.title, SKOS.notation, DCT.description):
+            literals = [o for o in self.g.objects(node, predicate) if isinstance(o, Literal)]
+            for literal in literals:
+                if literal.language and literal.language == self._default_lang:
+                    return str(literal)
+            if literals:
+                return str(literals[0])
+        return ""
 
     def _object_value_list_multilingual(self, subject, predicate):
         """
@@ -991,6 +1021,18 @@ class RDFProfile(object):
 
         return agent_ref
 
+    @staticmethod
+    def _as_dict_list(value):
+        """
+        A dict, or the list of dicts that the parser and repeating subfields give,
+        as a list of dicts. Anything else gives an empty list.
+        """
+        if isinstance(value, dict):
+            return [value] if value else []
+        if isinstance(value, (list, tuple)):
+            return [item for item in value if isinstance(item, dict) and item]
+        return []
+
     def _add_contact_to_graph(self, subject, predicate, contact):
         contact_uri = contact.get("uri")
         if contact_uri:
@@ -1019,13 +1061,13 @@ class RDFProfile(object):
             "identifier",
             _type=URIRefOrLiteral,
         )
-        self._add_triple_from_dict(
-            contact,
-            contact_details,
-            VCARD.hasURL,
-            "url",
-            _type=URIRef,
-        )
+        # contact["url"] is a list when it comes from the parser or a multiple_text field
+        urls = self._get_dict_value(contact, "url")
+        if isinstance(urls, str):
+            urls = [urls]
+        for url in urls or []:
+            if url:
+                self.g.add((contact_details, VCARD.hasURL, CleanedURIRef(url)))
 
     def _add_spatial_value_to_graph(self, spatial_ref, predicate, value):
         """
