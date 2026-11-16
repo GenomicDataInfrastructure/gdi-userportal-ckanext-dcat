@@ -74,7 +74,7 @@ TYPED_OBJECTS = (
     (DPV.hasPurpose, DPV.Purpose, DCT.description, True),
 )
 
-# The controlled vocabularies R8 requires (gap analysis section 4), all under one host.
+# The controlled vocabularies R8 requires, all under one host.
 # A bare authority code of such a vocabulary is written as its IRI; a value that is already
 # an IRI (Wikidata and ADMS ones included) or is not shaped like a code is left alone.
 HDEU_AUTHORITY = "https://hdeu-dcat.data.health.europa.eu/resource/authority"

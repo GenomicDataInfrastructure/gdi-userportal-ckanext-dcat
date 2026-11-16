@@ -16,8 +16,7 @@ from and written to RDF. Two health profiles exist:
 The R8 profile builds on the first and overrides only where R8 differs, so a row is the same for
 both unless its "R8" column says otherwise. A deployment enables one or both packs and a harvest
 source can pick one; see `docs/metadata-profiles.md` of the
-`gdi-userportal-ckan-docker` repository. The full comparison with R8, property by property, is in
-the [R8 gap analysis](healthdcat-ap-r8-gap-analysis.md).
+`gdi-userportal-ckan-docker` repository.
 
 Repeated values are written as repeated triples, not as an `rdf:List`.
 
