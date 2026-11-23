@@ -438,6 +438,26 @@ class RDFProfile(object):
 
         return result
 
+    def _contact_urls(self, agent):
+        """
+        Returns every vcard:hasURL of a contact as a sorted list without duplicates.
+
+        A URL is either the object itself or, when the object is a blank node, the
+        vcard:hasValue of that node. If there is none, returns an empty list.
+
+        A profile whose schema allows one contact page (HealthDCAT-AP R8) keeps the
+        first one of this list.
+        """
+        urls = set()
+        for obj in self.g.objects(agent, VCARD.hasURL):
+            if isinstance(obj, BNode):
+                value = self._object_value(obj, VCARD.hasValue)
+            else:
+                value = str(obj)
+            if value:
+                urls.add(value)
+        return sorted(urls)
+
     def _time_interval(self, subject, predicate, dcat_ap_version=1):
         """
         Returns the start and end date for a time interval object
@@ -659,8 +679,7 @@ class RDFProfile(object):
 
             contact["identifier"] = self._get_vcard_property_value(agent, VCARD.hasUID)
 
-            url_value = self._get_vcard_property_value(agent, VCARD.hasURL)
-            contact["url"] = [url_value] if url_value else []
+            contact["url"] = self._contact_urls(agent)
 
             contacts.append(contact)
 
