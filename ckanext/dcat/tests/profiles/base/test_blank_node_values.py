@@ -2,7 +2,9 @@
 A blank node that is read as a plain value used to become its internal id
 ("n1b2c3...b7"). It stands for its text instead, and for nothing if it has none.
 """
-from rdflib import Graph, URIRef
+from unittest import mock
+
+from rdflib import RDFS, Graph, Literal, URIRef
 
 from ckanext.dcat.profiles import RDFProfile
 
@@ -52,6 +54,31 @@ def test_the_text_of_a_blank_node_is_taken_in_the_default_language():
     profile._default_lang = "en"
 
     assert profile._object_value_list(DATASET, URIRef(DCT + "relation")) == ["Label"]
+
+
+def _text_of_a_node_whose_graph_lists(labels):
+    """The text of a blank node, when the graph hands out its rdfs:label literals in the given order."""
+    profile = _profile("dct:relation [ a dct:Standard ] .")
+    node = next(iter(profile.g.objects(DATASET, URIRef(DCT + "relation"))))
+
+    def objects(subject, predicate, *args, **kwargs):
+        return iter(labels if predicate == RDFS.label else [])
+
+    with mock.patch.object(profile.g, "objects", objects):
+        profile._default_lang = "en"
+        return profile._blank_node_text(node)
+
+
+def test_the_text_of_a_blank_node_does_not_depend_on_the_order_of_the_graph():
+    labels = [Literal("Etikett", lang="de"), Literal("Label", lang="fr"), Literal("Etichetta", lang="it")]
+
+    assert _text_of_a_node_whose_graph_lists(labels) == _text_of_a_node_whose_graph_lists(labels[::-1])
+
+
+def test_the_default_language_text_does_not_depend_on_the_order_of_the_graph():
+    labels = [Literal("B", lang="en"), Literal("A", lang="en"), Literal("Etikett", lang="de")]
+
+    assert _text_of_a_node_whose_graph_lists(labels) == _text_of_a_node_whose_graph_lists(labels[::-1]) == "A"
 
 
 def test_a_blank_node_next_to_an_iri_keeps_the_iri():

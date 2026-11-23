@@ -396,9 +396,15 @@ class RDFProfile(object):
         The text a blank node stands for: its label, preferred label, title, notation
         or description, in that order, in the default language if there is one.
         Returns an empty string for a node without any of them.
+
+        A graph does not keep an order, so the literals are sorted (by language, then
+        text) and a node gives the same text on every run.
         """
         for predicate in (RDFS.label, SKOS.prefLabel, DCT.title, SKOS.notation, DCT.description):
-            literals = [o for o in self.g.objects(node, predicate) if isinstance(o, Literal)]
+            literals = sorted(
+                (o for o in self.g.objects(node, predicate) if isinstance(o, Literal)),
+                key=lambda literal: (literal.language or "", str(literal)),
+            )
             for literal in literals:
                 if literal.language and literal.language == self._default_lang:
                     return str(literal)
