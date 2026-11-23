@@ -14,6 +14,12 @@ import ckan.lib.plugins as lib_plugins
 from ckanext.harvest.model import HarvestObject, HarvestObjectExtra
 from ckanext.harvest.logic.schema import unicode_safe
 from ckanext.dcat.harvesters.base import DCATHarvester
+from ckanext.dcat.harvesters.invalid_values import call_dropping_invalid_values
+from ckanext.dcat.metadata_profiles import (
+    MetadataProfileError,
+    installed_rdf_profiles,
+    resolve_source_profile,
+)
 from ckanext.dcat.processors import RDFParserException, RDFParser
 from ckanext.dcat.interfaces import IDCATRDFHarvester
 
@@ -118,9 +124,11 @@ class DCATRDFHarvester(DCATHarvester):
                                 extras=[HarvestObjectExtra(key='status',
                                                            value='delete')])
 
-            # Mark the rest of objects for this guid as not current
+            # Mark the rest of this source's objects for this guid as not current (another source can
+            # hold the same guid).
             model.Session.query(HarvestObject) \
                          .filter_by(guid=guid) \
+                         .filter(HarvestObject.harvest_source_id == harvest_job.source.id) \
                          .update({'current': False}, False)
             obj.save()
             object_ids.append(obj.id)
@@ -140,7 +148,27 @@ class DCATRDFHarvester(DCATHarvester):
             if rdf_format not in supported_formats:
                 raise ValueError('rdf_format should be one of: ' + ", ".join(supported_formats))
 
+        # 'metadata_profile' (a profile pack) or 'profile' (a raw RDF profile chain), not both
+        try:
+            resolve_source_profile(source_config_obj, p.toolkit.config, installed_rdf_profiles())
+        except MetadataProfileError as e:
+            raise ValueError(str(e))
+
         return source_config
+
+    def _source_rdf_profiles(self, harvest_job):
+        '''
+        The RDF profile chain the source is parsed with: the one of its 'metadata_profile' (or its raw
+        'profile' chain), else the one of the deployment's main profile.
+
+        Raises MetadataProfileError, with no fallback to the main profile: that would change the shape
+        of the data unnoticed.
+        '''
+        source_config = json.loads(harvest_job.source.config) if harvest_job.source.config else {}
+        resolved = resolve_source_profile(source_config, p.toolkit.config)
+        log.info('Harvest source %s is parsed with metadata profile %s (RDF profiles: %s)',
+                 harvest_job.source.id, resolved.name or '-', ' '.join(resolved.rdf_profiles))
+        return resolved.rdf_profiles
 
     def gather_stage(self, harvest_job):
 
@@ -150,6 +178,15 @@ class DCATRDFHarvester(DCATHarvester):
         if harvest_job.source.config:
             rdf_format = json.loads(harvest_job.source.config).get("rdf_format")
 
+        try:
+            rdf_profiles = self._source_rdf_profiles(harvest_job)
+        except MetadataProfileError as e:
+            # A raise here would crash the consumer, so report it on the job and harvest nothing
+            self._save_gather_error(
+                'Harvest source %s: %s' % (harvest_job.source.id, e), harvest_job
+            )
+            return []
+
         # Get file contents of first page
         next_page_url = harvest_job.source.url
 
@@ -157,6 +194,9 @@ class DCATRDFHarvester(DCATHarvester):
         object_ids = []
         last_content_hash = None
         self._names_taken = []
+        # RDF URI of a dataset series -> its id and name. It is kept over the pages of a paged source,
+        # so a dataset on a later page can point at a series on an earlier page.
+        series_mapping = {}
 
         while next_page_url:
             for harvester in p.PluginImplementations(IDCATRDFHarvester):
@@ -191,8 +231,7 @@ class DCATRDFHarvester(DCATHarvester):
             if not content:
                 return []
 
-            # TODO: profiles conf
-            parser = RDFParser()
+            parser = RDFParser(profiles=rdf_profiles or None)
 
             try:
                 parser.parse(content, _format=rdf_format)
@@ -213,23 +252,21 @@ class DCATRDFHarvester(DCATHarvester):
 
                 source_dataset = model.Package.get(harvest_job.source.id)
 
-                series_ids, series_mapping = self._parse_and_collect(
+                object_ids += self._parse_and_collect(
                     parser.dataset_series(),
                     source_dataset,
                     harvest_job,
                     guids_in_source,
                     is_series=True,
-                    collect_series_mapping=True
+                    series_mapping=series_mapping
                 )
-                object_ids += series_ids
 
                 object_ids += self._parse_and_collect(
                     parser.datasets(series_mapping),
                     source_dataset,
                     harvest_job,
                     guids_in_source,
-                    is_series=False,
-                    collect_series_mapping=False
+                    is_series=False
                 )
             except Exception as e:
                 self._save_gather_error('Error when processsing dataset: %r / %s' % (e, traceback.format_exc()),
@@ -281,20 +318,26 @@ class DCATRDFHarvester(DCATHarvester):
                                     harvest_object, 'Import')
             return False
 
-        # Get the last harvested object (if any)
-        previous_object = model.Session.query(HarvestObject) \
-                                       .filter(HarvestObject.guid==harvest_object.guid) \
-                                       .filter(HarvestObject.current==True) \
-                                       .first()
+        is_series = dataset.get('type') == 'dataset_series'
 
-        # Flag previous object as not current anymore
-        if previous_object:
-            previous_object.current = False
-            previous_object.add()
+        def flag_current():
+            # Only this source's object is replaced: another source can hold the same guid
+            previous_object = model.Session.query(HarvestObject) \
+                                           .filter(HarvestObject.guid==harvest_object.guid) \
+                                           .filter(HarvestObject.harvest_source_id==harvest_object.harvest_source_id) \
+                                           .filter(HarvestObject.current==True) \
+                                           .first()
 
-        # Flag this object as the current one
-        harvest_object.current = True
-        harvest_object.add()
+            # Flag previous object as not current anymore
+            if previous_object:
+                previous_object.current = False
+                previous_object.add()
+
+            # Flag this object as the current one
+            harvest_object.current = True
+            harvest_object.add()
+
+        flag_current()
 
         context = {
             'user': self._get_user_name(),
@@ -304,8 +347,32 @@ class DCATRDFHarvester(DCATHarvester):
 
         dataset = self.modify_package_dict(dataset, {}, harvest_object)
 
-        # Check if a dataset with the same guid exists
-        existing_dataset = self._get_existing_dataset(harvest_object.guid)
+        # This source's own package for the guid, if any
+        existing = self._find_existing_package(harvest_object.guid, harvest_object.harvest_source_id, is_series)
+        existing_dataset = (
+            p.toolkit.get_action('package_show')({}, {'id': existing.id}) if existing else None
+        )
+
+        import_warning = None
+
+        def save_reference(defer_constraints=False):
+            # Save reference to the package on the object
+            harvest_object.package_id = dataset['id']
+            harvest_object.add()
+
+            if defer_constraints:
+                # Defer constraints and flush so the dataset can be indexed with
+                # the harvest object id (on the after_show hook from the harvester
+                # plugin)
+                model.Session.execute(
+                    sa.text('SET CONSTRAINTS harvest_object_package_id_fkey DEFERRED')
+                )
+                model.Session.flush()
+
+        def redo_bookkeeping(defer_constraints=False):
+            # CKAN rolls back when validation fails: that undoes the flags and the reference too
+            flag_current()
+            save_reference(defer_constraints)
 
         try:
             package_plugin = lib_plugins.lookup_package_plugin(dataset.get('type', None))
@@ -334,11 +401,12 @@ class DCATRDFHarvester(DCATHarvester):
 
                 try:
                     if dataset:
-                        # Save reference to the package on the object
-                        harvest_object.package_id = dataset['id']
-                        harvest_object.add()
+                        save_reference()
 
-                        p.toolkit.get_action('package_update')(context, dataset)
+                        _, warning = call_dropping_invalid_values(
+                            p.toolkit.get_action('package_update'), context, dataset, before_retry=redo_bookkeeping
+                        )
+                        import_warning = warning
                     else:
                         log.info('Ignoring dataset %s' % existing_dataset['name'])
                         return 'unchanged'
@@ -361,8 +429,10 @@ class DCATRDFHarvester(DCATHarvester):
                     package_schema = harvester.update_package_schema_for_create(package_schema)
                 context['schema'] = package_schema
 
-                # We need to explicitly provide a package ID
-                dataset['id'] = str(uuid.uuid4())
+                # We need to explicitly provide a package ID. A dataset series keeps the one it got
+                # when it was gathered: the datasets of this harvest point at it.
+                if not (is_series and dataset.get('id')):
+                    dataset['id'] = str(uuid.uuid4())
                 package_schema['id'] = [unicode_safe]
 
                 harvester_tmp_dict = {}
@@ -373,19 +443,15 @@ class DCATRDFHarvester(DCATHarvester):
 
                 try:
                     if dataset:
-                        # Save reference to the package on the object
-                        harvest_object.package_id = dataset['id']
-                        harvest_object.add()
+                        save_reference(defer_constraints=True)
 
-                        # Defer constraints and flush so the dataset can be indexed with
-                        # the harvest object id (on the after_show hook from the harvester
-                        # plugin)
-                        model.Session.execute(
-                            sa.text('SET CONSTRAINTS harvest_object_package_id_fkey DEFERRED')
+                        _, warning = call_dropping_invalid_values(
+                            p.toolkit.get_action('package_create'),
+                            context,
+                            dataset,
+                            before_retry=lambda: redo_bookkeeping(defer_constraints=True)
                         )
-                        model.Session.flush()
-
-                        p.toolkit.get_action('package_create')(context, dataset)
+                        import_warning = warning
                     else:
                         log.info('Ignoring dataset %s' % name)
                         return 'unchanged'
@@ -409,7 +475,31 @@ class DCATRDFHarvester(DCATHarvester):
         finally:
             model.Session.commit()
 
+        if import_warning:
+            self._save_object_error(import_warning, harvest_object, 'Import')
+
         return True
+
+    def _find_existing_package(self, guid, source_id, is_series=False):
+        '''
+        The active dataset (or dataset series) this source imported for the guid, or None. It is found
+        through this source's harvest objects, not through the 'guid' extra, which two sources can share.
+        '''
+        imported = model.Session.query(HarvestObject.package_id).\
+            filter(HarvestObject.guid == str(guid)).\
+            filter(HarvestObject.harvest_source_id == source_id).\
+            filter(HarvestObject.package_id.isnot(None))
+
+        packages = model.Session.query(model.Package).\
+            filter(model.Package.id.in_(imported)).\
+            filter(model.Package.state == 'active')
+
+        if is_series:
+            packages = packages.filter(model.Package.type == 'dataset_series')
+        else:
+            packages = packages.filter(model.Package.type != 'dataset_series')
+
+        return packages.first()
 
     def _parse_and_collect(
         self,
@@ -418,11 +508,11 @@ class DCATRDFHarvester(DCATHarvester):
         harvest_job,
         guids_in_source,
         is_series=False,
-        collect_series_mapping=False
+        series_mapping=None
     ):
+        # series_mapping, when given, is filled with the RDF URI -> id and name of each item
         object_ids = []
         label = "dataset series" if is_series else "dataset"
-        series_mapping = {} if collect_series_mapping else None
 
         for item in items:
             original_title = item.get("title", label)
@@ -446,32 +536,26 @@ class DCATRDFHarvester(DCATHarvester):
             item.setdefault("extras", []).append({"key": "guid", "value": guid})
             guids_in_source.append(guid)
 
-            obj = HarvestObject(guid=guid, job=harvest_job, content=json.dumps(item))
-            obj.save()
-            object_ids.append(obj.id)
-
-            # Store mapping of RDF URI to dataset name if requested
-            if collect_series_mapping:
+            # Store the RDF URI -> id/name mapping before the object is saved, so a new series already
+            # has its id when the datasets of this harvest point at it.
+            if series_mapping is not None:
                 series_uri = item.get("uri") or item.get("identifier")
                 if series_uri:
-                    # Try to find an existing active dataset series by 'guid' match
-                    existing = model.Session.query(model.Package).\
-                        join(model.PackageExtra).\
-                        filter(model.PackageExtra.key == 'guid').\
-                        filter(model.PackageExtra.value == series_uri).\
-                        filter(model.Package.type == 'dataset_series').\
-                        filter(model.Package.state == 'active').\
-                        first()
+                    # Try to find an existing active dataset series of this source
+                    existing = self._find_existing_package(series_uri, harvest_job.source.id, is_series=True)
 
                     if existing:
                         item["name"] = existing.name
+                    else:
+                        item.setdefault("id", str(uuid.uuid4()))
 
                     series_mapping[str(series_uri)] = {
-                        "id": existing.id if existing else item.get("id"),
+                        "id": existing.id if existing else item["id"],
                         "name": item["name"]
                     }
 
-        if collect_series_mapping:
-            return object_ids, series_mapping
+            obj = HarvestObject(guid=guid, job=harvest_job, content=json.dumps(item))
+            obj.save()
+            object_ids.append(obj.id)
 
         return object_ids
