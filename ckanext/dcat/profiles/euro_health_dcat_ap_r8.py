@@ -791,14 +791,43 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
                         agent.pop(subfield, None)
 
         known = self._subfields(self._schema_resource_field("access_services"))
-        if "documentation" in known:
-            return
         for resource_dict in dataset_dict.get("resources", []):
-            services = resource_dict.get("access_services")
-            if isinstance(services, list):
-                for service in services:
-                    if isinstance(service, dict):
-                        service.pop("documentation", None)
+            self._drop_from_the_access_services(resource_dict, known)
+
+    def _drop_from_the_access_services(self, resource_dict, known):
+        services = resource_dict.get("access_services")
+        is_json = isinstance(services, str)
+        services = self._as_list_of_dicts(services)
+        changed = False
+        for service in services:
+            if "documentation" not in known and "documentation" in service:
+                service.pop("documentation")
+                changed = True
+            if known:
+                changed |= self._drop_the_structures_the_schema_has_no_subfield_for(service, known)
+        if changed and is_json:
+            resource_dict["access_services"] = json.dumps(services)
+
+    def _drop_the_structures_the_schema_has_no_subfield_for(self, service, known):
+        """Drops what CKAN would refuse: a data service property the schema has no subfield for and that holds
+        dicts, such as the dct:creator of a data service, which R8 does not have.
+
+        CKAN files an unknown plain value under the extras of the data service and accepts it. An unknown list of
+        dicts has no place to go, is reported as junk and fails the whole dataset. The plain values are left
+        alone: ``access_service_ref`` is how a data service finds its node when the dataset is written again.
+        """
+        dropped = False
+        for key in [k for k in service if k not in known]:
+            value = service[key]
+            if isinstance(value, dict) or (isinstance(value, list) and any(isinstance(v, dict) for v in value)):
+                log.warning(
+                    "data service %s has %s but the schema has no such subfield; it is not imported",
+                    service.get("uri") or service.get("access_service_ref") or "(unnamed)",
+                    key,
+                )
+                del service[key]
+                dropped = True
+        return dropped
 
     # --- contact points: one contact page ------------------------------------------------
 

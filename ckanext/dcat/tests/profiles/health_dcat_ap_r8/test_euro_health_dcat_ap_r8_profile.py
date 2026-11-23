@@ -727,6 +727,61 @@ class TestWhatTheSchemaHasNoSubfieldFor:
         assert set(CONTACT_POINT) <= set(hdab)
 
 
+SERVICE_WITH_CREATOR_TTL = AGENT_PREFIXES + """
+<http://example.org/dataset> a dcat:Dataset ; dcat:distribution <http://example.org/dist> .
+<http://example.org/dist> a dcat:Distribution ; dcat:accessURL <http://example.org/file> ;
+    dcat:accessService <http://example.org/service> .
+<http://example.org/service> a dcat:DataService ; dct:title "Service" ;
+    dcat:endpointURL <http://example.org/endpoint> ;
+    dct:modified "2025-10-16T12:00:00Z"^^xsd:dateTime ;
+    dct:creator <http://example.org/creator> .
+<http://example.org/creator> a foaf:Agent ; foaf:name "Creator" ; foaf:mbox <mailto:creator@example.org> .
+"""
+
+
+def _the_access_service(dataset_dict):
+    (resource,) = dataset_dict["resources"]
+    services = resource["access_services"]
+    (service,) = json.loads(services) if isinstance(services, str) else services
+    return service
+
+
+class TestAccessServiceStructuresTheSchemaHasNoSubfieldFor:
+    """R8 has no dct:creator on a data service. CKAN refuses an unknown list of dicts as junk, so the whole dataset would fail."""
+
+    def test_a_creator_of_a_data_service_is_dropped(self):
+        service = _the_access_service(parse(SERVICE_WITH_CREATOR_TTL))
+
+        assert "creator" not in service
+        assert service["title"] == "Service"
+
+    def test_the_drop_gives_a_warning(self, caplog):
+        parse(SERVICE_WITH_CREATOR_TTL)
+
+        assert any("creator" in r.getMessage() and "data service" in r.getMessage() for r in caplog.records)
+
+    def test_a_schema_that_has_the_subfield_keeps_it(self):
+        with_creator = {
+            **SCHEMA,
+            "resource_fields": [
+                _field(
+                    "access_services",
+                    repeating_subfields=[_field("title"), _field("documentation"), _field("creator", repeating_subfields=_agent_subfields())],
+                )
+            ],
+        }
+
+        service = _the_access_service(parse(SERVICE_WITH_CREATOR_TTL, schema=with_creator))
+
+        assert service["creator"]
+
+    def test_plain_values_the_schema_has_no_subfield_for_are_left_alone(self):
+        """CKAN keeps them as extras instead of refusing the dataset, so nothing is lost."""
+        service = _the_access_service(parse(SERVICE_WITH_CREATOR_TTL))
+
+        assert service["modified"] == "2025-10-16T12:00:00+00:00"
+
+
 HDEU = "https://hdeu-dcat.data.health.europa.eu/resource/authority"
 
 
