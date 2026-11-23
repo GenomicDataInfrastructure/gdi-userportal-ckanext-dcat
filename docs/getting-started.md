@@ -8,15 +8,7 @@
         pip install ckanext-dcat
 
 
-    !!! Note
-
-        For versions older than **ckanext-dcat 2.3.0** use the old legacy version of the install:
-
-            pip install -e git+https://github.com/ckan/ckanext-dcat.git#egg=ckanext-dcat
-
-            pip install -r ckanext-dcat/requirements.txt
-
-
+    
 2.  Enable the required plugins in your ini file:
 
         ckan.plugins = dcat dcat_rdf_harvester structured_data

@@ -1,3 +1,5 @@
+import logging
+
 from rdflib import XSD, Literal, URIRef, RDF, BNode, DCAT, RDFS
 from rdflib.namespace import Namespace
 from rdflib.namespace import DCTERMS as DCT
@@ -6,7 +8,9 @@ from ckanext.dcat.utils import resource_uri
 from ckanext.dcat.profiles.base import URIRefOrLiteral
 from ckanext.dcat.profiles.euro_dcat_ap_3 import EuropeanDCATAP3Profile
 
-# HealthDCAT-AP namespace. Note: not finalized yet
+log = logging.getLogger(__name__)
+
+# The HealthDCAT-AP namespace used by the profiles in this module.
 HEALTHDCATAP = Namespace("http://healthdataportal.eu/ns/health#")
 
 # Data Privacy Vocabulary namespace
@@ -164,10 +168,16 @@ class EuropeanHealthDCATAPProfile(EuropeanDCATAP3Profile):
             if "body" not in annotation_dict or "target" not in annotation_dict:
                 continue
 
-            # Get the motivation (URI or literal)
-            motivation = self._object_value(annotation_ref, OA.motivatedBy)
-            if motivation:
-                annotation_dict["motivated_by"] = motivation
+            # The motivation is an IRI (the range of oa:motivatedBy). A literal is ignored.
+            for motivation in self.g.objects(annotation_ref, OA.motivatedBy):
+                if isinstance(motivation, URIRef) and str(motivation).startswith(("http://", "https://")):
+                    annotation_dict["motivated_by"] = str(motivation)
+                    break
+                log.warning(
+                    "%s has oa:motivatedBy %r, which is not an IRI; it is not read",
+                    annotation_ref,
+                    str(motivation),
+                )
 
             quality_annotation.append(annotation_dict)
 
@@ -315,8 +325,8 @@ class EuropeanHealthDCATAPProfile(EuropeanDCATAP3Profile):
 
     def _add_quality_annotation(self, dataset_dict, dataset_ref):
         """
-        Serialize qualified_annotation entries into RDF as DQV.QualityAnnotations.
-        Only URI-based body, target, and motivation values are supported.
+        Serialize quality_annotation entries into RDF as DQV.QualityAnnotations.
+        body, target and motivated_by are written only when they are http(s) IRIs.
         """
         quality_annotation = self._get_dict_value(dataset_dict, "quality_annotation")
 
@@ -399,7 +409,7 @@ class EuropeanHealthDCATAPProfile(EuropeanDCATAP3Profile):
         # Call parent method to add standard agent properties
         super()._add_agents(dataset_ref, dataset_dict, agent_key, rdf_predicate, first_only)
         
-        # Now add healthdcatap:publisherNote for each agent
+        # healthdcatap:publisherNote for each agent
         agent = dataset_dict.get(agent_key)
         if isinstance(agent, list) and len(agent) and self._not_empty_dict(agent[0]):
             agents = [agent[0]] if first_only else agent
@@ -410,7 +420,7 @@ class EuropeanHealthDCATAPProfile(EuropeanDCATAP3Profile):
                     agent_ref = CleanedURIRef(agent_uri)
                 else:
                     # For BNode agents, we need to find them in the graph
-                    # This is more complex, so we'll skip for now as they should have URIs
+                    # A blank node agent has no IRI to attach the note to, so the note is not written
                     continue
                 
                 # Add publisherNote if it exists
