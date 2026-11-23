@@ -782,6 +782,58 @@ class TestAccessServiceStructuresTheSchemaHasNoSubfieldFor:
         assert service["modified"] == "2025-10-16T12:00:00+00:00"
 
 
+ACTIVITY_TTL = AGENT_PREFIXES + """
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+<http://example.org/dataset> a dcat:Dataset ; prov:wasGeneratedBy <http://example.org/activity> .
+<http://example.org/activity> a prov:Activity ; rdfs:label "Collection" ;
+    prov:wasAssociatedWith <http://example.org/maker> .
+<http://example.org/maker> a foaf:Agent ; foaf:name "Maker" ; foaf:mbox <mailto:maker@example.org> .
+"""
+
+ACTIVITY_SCHEMA = {
+    **SCHEMA,
+    "dataset_fields": [
+        *SCHEMA["dataset_fields"],
+        _field("was_generated_by", repeating_subfields=[_field("uri"), _field("label"), _field("type"), _field("dct_type")]),
+    ],
+}
+
+
+class TestActivityStructuresTheSchemaHasNoSubfieldFor:
+    """The R8 Activity has no prov:wasAssociatedWith. CKAN refuses the unknown list of agents as junk."""
+
+    def test_the_agents_associated_with_an_activity_are_dropped(self):
+        (activity,) = parse(ACTIVITY_TTL, schema=ACTIVITY_SCHEMA)["was_generated_by"]
+
+        assert "wasAssociatedWith" not in activity
+        assert activity["label"] == "Collection"
+
+    def test_the_drop_gives_a_warning(self, caplog):
+        parse(ACTIVITY_TTL, schema=ACTIVITY_SCHEMA)
+
+        assert any("wasAssociatedWith" in r.getMessage() and "activity" in r.getMessage() for r in caplog.records)
+
+    def test_a_schema_that_has_the_subfield_keeps_it(self):
+        with_agents = {
+            **ACTIVITY_SCHEMA,
+            "dataset_fields": [
+                _field(
+                    "was_generated_by",
+                    repeating_subfields=[_field("label"), _field("wasAssociatedWith", repeating_subfields=_agent_subfields())],
+                )
+                if f["field_name"] == "was_generated_by"
+                else f
+                for f in ACTIVITY_SCHEMA["dataset_fields"]
+            ],
+        }
+
+        (activity,) = parse(ACTIVITY_TTL, schema=with_agents)["was_generated_by"]
+
+        assert activity["wasAssociatedWith"]
+
+
 HDEU = "https://hdeu-dcat.data.health.europa.eu/resource/authority"
 
 

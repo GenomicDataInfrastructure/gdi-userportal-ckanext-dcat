@@ -794,6 +794,22 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
         for resource_dict in dataset_dict.get("resources", []):
             self._drop_from_the_access_services(resource_dict, known)
 
+        self._drop_from_the_activities(dataset_dict)
+
+    def _drop_from_the_activities(self, dataset_dict):
+        """The R8 Activity has no prov:wasAssociatedWith, which the shared parse reads into each activity."""
+        known = self._subfields(self._schema_field("was_generated_by"))
+        if not known:
+            return
+        activities = dataset_dict.get("was_generated_by")
+        is_json = isinstance(activities, str)
+        activities = self._as_list_of_dicts(activities)
+        changed = False
+        for activity in activities:
+            changed |= self._drop_the_structures_the_schema_has_no_subfield_for(activity, known, "activity")
+        if changed and is_json:
+            dataset_dict["was_generated_by"] = json.dumps(activities)
+
     def _drop_from_the_access_services(self, resource_dict, known):
         services = resource_dict.get("access_services")
         is_json = isinstance(services, str)
@@ -804,28 +820,30 @@ class EuropeanHealthDCATAPR8Profile(EuropeanHealthDCATAPProfile):
                 service.pop("documentation")
                 changed = True
             if known:
-                changed |= self._drop_the_structures_the_schema_has_no_subfield_for(service, known)
+                changed |= self._drop_the_structures_the_schema_has_no_subfield_for(service, known, "data service")
         if changed and is_json:
             resource_dict["access_services"] = json.dumps(services)
 
-    def _drop_the_structures_the_schema_has_no_subfield_for(self, service, known):
-        """Drops what CKAN would refuse: a data service property the schema has no subfield for and that holds
-        dicts, such as the dct:creator of a data service, which R8 does not have.
+    def _drop_the_structures_the_schema_has_no_subfield_for(self, item, known, what):
+        """Drops what CKAN would refuse: a property of a data service or an activity that the schema has no
+        subfield for and that holds dicts, such as the dct:creator of a data service or the prov:wasAssociatedWith
+        of an activity, which R8 does not have.
 
-        CKAN files an unknown plain value under the extras of the data service and accepts it. An unknown list of
-        dicts has no place to go, is reported as junk and fails the whole dataset. The plain values are left
-        alone: ``access_service_ref`` is how a data service finds its node when the dataset is written again.
+        CKAN files an unknown plain value under the extras of the item and accepts it. An unknown list of dicts has
+        no place to go, is reported as junk and fails the whole dataset. The plain values are left alone:
+        ``access_service_ref`` is how a data service finds its node when the dataset is written again.
         """
         dropped = False
-        for key in [k for k in service if k not in known]:
-            value = service[key]
+        for key in [k for k in item if k not in known]:
+            value = item[key]
             if isinstance(value, dict) or (isinstance(value, list) and any(isinstance(v, dict) for v in value)):
                 log.warning(
-                    "data service %s has %s but the schema has no such subfield; it is not imported",
-                    service.get("uri") or service.get("access_service_ref") or "(unnamed)",
+                    "%s %s has %s but the schema has no such subfield; it is not imported",
+                    what,
+                    item.get("uri") or item.get("access_service_ref") or "(unnamed)",
                     key,
                 )
-                del service[key]
+                del item[key]
                 dropped = True
         return dropped
 
